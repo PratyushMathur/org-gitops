@@ -1,0 +1,87 @@
+# Production is a separate ApplicationSet rather than another generator on the
+# staging one. That keeps the sync policy differences explicit instead of hidden
+# in template overrides, and means prod rollouts can be paused or rolled back by
+# touching a single object.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: apps-prod
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  # If this ApplicationSet is ever deleted, leave the running workloads alone.
+  syncPolicy:
+    preserveResourcesOnDeletion: true
+
+  # Every registered app x every prod cluster. Today that is cluster-a and
+  # cluster-b; labelling a third cluster env=prod is enough to roll every app
+  # onto it (it also has to be added to the apps-prod AppProject destinations).
+  generators:
+    - matrix:
+        generators:
+          # Clusters are found by label on their Argo CD cluster Secret, never
+          # by hardcoded API URL:
+          #   argocd cluster add <context> --name cluster-a --label env=prod
+          - clusters:
+              selector:
+                matchLabels:
+                  env: prod
+          - git:
+              repoURL: https://github.com/PratyushMathur/org-gitops.git
+              revision: HEAD
+              files:
+                - path: "environments/prod/*/config.yaml"
+
+  template:
+    metadata:
+      # Unique per cluster: canary-app-prod-cluster-a, canary-app-prod-cluster-b
+      name: "{{.app}}-{{.env}}-{{.nameNormalized}}"
+      labels:
+        app.kubernetes.io/name: "{{.app}}"
+        app.kubernetes.io/part-of: org-gitops
+        env: "{{.env}}"
+        cluster: "{{.nameNormalized}}"
+      # No resources-finalizer: deleting a prod Application must not cascade.
+    spec:
+      project: "{{.project}}"
+
+      sources:
+        - repoURL: https://github.com/PratyushMathur/org-gitops.git
+          targetRevision: HEAD
+          path: "{{.chartPath}}"
+          helm:
+            releaseName: "{{.app}}"
+            # The per-cluster file is optional - most apps are identical on
+            # every prod cluster and only need the shared values.yaml.
+            ignoreMissingValueFiles: true
+            valueFiles:
+              - $values/environments/{{.env}}/{{.app}}/values.yaml
+              - $values/environments/{{.env}}/{{.app}}/values-{{.nameNormalized}}.yaml
+        # Second source exists only to expose the repo as $values above, so the
+        # env overrides can live outside the chart directory.
+        - repoURL: https://github.com/PratyushMathur/org-gitops.git
+          targetRevision: HEAD
+          ref: values
+
+      destination:
+        # Cluster comes from the generator, not from config.yaml.
+        name: "{{.name}}"
+        namespace: "{{.namespace}}"
+
+      # No `automated` block: prod syncs are triggered by a human or a pipeline,
+      # per cluster, so a bad release can be stopped after the first one.
+      # Drift still shows up as OutOfSync in the UI.
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
+
+      revisionHistoryLimit: 10

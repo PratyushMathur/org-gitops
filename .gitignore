@@ -1,0 +1,5 @@
+# Helm dependency artifacts. `helm dependency build` (and Argo CD's repo-server)
+# rebuild these from Chart.lock, which IS committed.
+helm/*/charts/
+
+.DS_Store

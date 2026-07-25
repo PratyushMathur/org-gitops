@@ -1,0 +1,8 @@
+# Consumed by the apps-staging ApplicationSet git files generator.
+# No cluster here on purpose - the ApplicationSet fans this out to every cluster
+# labelled env=staging. This file says *what* runs, not *where*.
+app: canary-app
+env: staging
+chartPath: helm/canary-app
+namespace: canary-staging
+project: apps-staging

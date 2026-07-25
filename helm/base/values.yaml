@@ -1,0 +1,8 @@
+# Intentionally empty.
+#
+# Helm does NOT merge a library chart's values.yaml into the parent chart's
+# values, so defaults cannot live here. They live in `templates/_defaults.tpl`
+# under the `base.defaultValues` template and are merged at render time by
+# `base.values` (app values win over defaults).
+#
+# See README.md for the full list of settings an app chart may override.

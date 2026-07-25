@@ -1,0 +1,33 @@
+# The one object applied by hand. Everything else in argocd/ is managed by it,
+# including this file, so subsequent changes arrive through git.
+#
+#   kubectl apply -f argocd/bootstrap/root-app.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/PratyushMathur/org-gitops.git
+    targetRevision: HEAD
+    path: argocd
+    directory:
+      recurse: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      # No prune: removing an AppProject or ApplicationSet should be a
+      # deliberate act, not a side effect of moving a file.
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

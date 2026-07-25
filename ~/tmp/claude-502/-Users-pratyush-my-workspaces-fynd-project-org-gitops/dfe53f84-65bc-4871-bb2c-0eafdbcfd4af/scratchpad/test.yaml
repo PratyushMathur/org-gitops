@@ -1,0 +1,22 @@
+config:
+  LOG_LEVEL: debug
+  MAX_CONN: 100
+ingress:
+  enabled: true
+autoscaling:
+  enabled: true
+  targetMemoryUtilizationPercentage: 75
+pdb:
+  enabled: true
+  minAvailable: 1
+commonLabels:
+  team: platform
+commonAnnotations:
+  owner: sre@example.com
+extraObjects:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: '{{ include "base.fullname" . }}-extra'
+    stringData:
+      hello: world

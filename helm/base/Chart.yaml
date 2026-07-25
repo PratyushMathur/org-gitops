@@ -1,0 +1,12 @@
+apiVersion: v2
+name: base
+description: >-
+  Org-wide base library chart. Provides the standard Deployment, Service,
+  ServiceAccount, Ingress, HPA, PDB and ConfigMap templates plus the opinionated
+  defaults every application chart inherits.
+type: library
+version: 0.1.0
+keywords:
+  - base
+  - library
+  - platform

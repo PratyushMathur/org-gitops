@@ -1,0 +1,8 @@
+# Consumed by the apps-prod ApplicationSet git files generator.
+# No cluster here on purpose - the ApplicationSet fans this out to every cluster
+# labelled env=prod. This file says *what* runs, not *where*.
+app: canary-app
+env: prod
+chartPath: helm/canary-app
+namespace: canary-prod
+project: apps-prod

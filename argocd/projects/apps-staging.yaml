@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: apps-staging
+  namespace: argocd
+spec:
+  description: Application workloads in staging.
+
+  sourceRepos:
+    - https://github.com/PratyushMathur/org-gitops.git
+
+  # Matched by cluster name, because that is what the ApplicationSet puts in
+  # destination.name. Any cluster labelled env=staging is allowed - staging does
+  # not warrant the explicit allowlist that apps-prod carries.
+  destinations:
+    - name: "*"
+      namespace: "*-staging"
+
+  # Apps are namespaced-only. Namespace itself is allowed so the
+  # CreateNamespace=true sync option can do its job.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  orphanedResources:
+    warn: true

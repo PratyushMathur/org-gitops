@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: apps-prod
+  namespace: argocd
+spec:
+  description: Application workloads in production.
+
+  sourceRepos:
+    - https://github.com/PratyushMathur/org-gitops.git
+
+  # Matched by cluster name, because that is what the ApplicationSet puts in
+  # destination.name. The label env=prod is how clusters are *discovered*; this
+  # list is what they are *authorised* for. Adding a prod cluster is therefore
+  # deliberately two steps: label the cluster Secret, then add it here.
+  # Replace both entries with `- name: "*"` if you would rather the label alone
+  # be sufficient.
+  destinations:
+    - name: cluster-a
+      namespace: "*-prod"
+    - name: cluster-b
+      namespace: "*-prod"
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  orphanedResources:
+    warn: true
+
+  # Attach an RBAC role here (or bind the project in argocd-rbac-cm) to gate who
+  # can run a prod sync. Left off deliberately - it needs your real group names.

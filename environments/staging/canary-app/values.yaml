@@ -1,0 +1,21 @@
+# staging overrides for canary-app.
+# Shaped like prod so staging is a meaningful rehearsal, at lower scale.
+
+replicaCount: 2
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: canary.staging.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+pdb:
+  enabled: true
+  maxUnavailable: 1
+
+config:
+  LOG_LEVEL: info
+  ENVIRONMENT: staging
