@@ -56,11 +56,12 @@ spec:
           helm:
             releaseName: "{{.app}}"
             # The per-cluster file is optional - most apps are identical on
-            # every prod cluster and only need the shared values.yaml.
+            # every prod cluster and need nothing beyond the chart's values.yaml.
             ignoreMissingValueFiles: true
+            # Only a per-cluster layer remains. App and environment values both
+            # live in the chart's own values.yaml.
             valueFiles:
-              - $values/environments/{{.env}}/{{.app}}/values.yaml
-              - $values/environments/{{.env}}/{{.app}}/values-{{.nameNormalized}}.yaml
+              - $values/environments/{{.env}}/{{.app}}/overrides-{{.nameNormalized}}.yaml
         # Second source exists only to expose the repo as $values above, so the
         # env overrides can live outside the chart directory.
         - repoURL: https://github.com/PratyushMathur/org-gitops.git

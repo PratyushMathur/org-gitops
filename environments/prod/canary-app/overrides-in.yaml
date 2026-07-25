@@ -1,0 +1,37 @@
+# cluster-a overrides for canary-app in prod.
+#
+# Layered on top of helm/canary-app/values.yaml by the apps-prod ApplicationSet.
+# Only settings that genuinely differ between prod clusters belong here -
+# anything shared stays in the chart's values.yaml so it cannot drift.
+#
+# Helm REPLACES lists rather than merging them, so ingress.hosts and ingress.tls
+# are restated in full below. Maps (like config) do merge.
+
+config:
+  CLUSTER: cluster-a
+  REGION: asia-south1
+
+image:
+  repository: pmathur/canary-app
+  # Quoted: unquoted 2.0 is a YAML float and renders as ":2".
+  tag: "2.0"
+
+ingress:
+  hosts:
+    # Shared active/active endpoint, resolved to a cluster by the global load
+    # balancer. Present on both prod clusters.
+    - host: demo.pynd.dev
+      paths:
+        - path: /
+          pathType: Prefix
+    # Regional endpoint (ap-south-1), for targeted smoke tests and failover
+    # cutover.
+    - host: in.demo.pynd.dev
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: canary-app-tls
+      hosts:
+        - demo.pynd.dev
+        - in.demo.pynd.dev

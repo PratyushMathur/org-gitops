@@ -74,48 +74,57 @@ the AppProject `destinations` match on `name` rather than `server`.
 
 ## Values layering
 
-Four layers, lowest to highest:
+Three layers, lowest to highest:
 
 1. `helm/base` — org defaults (`templates/_defaults.tpl`)
-2. `helm/<app>/values.yaml` — app-wide settings
-3. `environments/<env>/<app>/values.yaml` — environment overrides
-4. `environments/<env>/<app>/values-<cluster>.yaml` — per-cluster overrides,
+2. `helm/<app>/values.yaml` — **all** app and environment settings
+3. `environments/<env>/<app>/overrides-<cluster>.yaml` — per-cluster overrides,
    **optional** (`ignoreMissingValueFiles: true`)
 
-Layer 4 exists for the cases where two prod clusters genuinely differ. For
+There is deliberately **no per-environment layer**. `helm/<app>/values.yaml` is
+the single source of values, and it holds production values, so every
+environment deploys the same configuration. The only thing that varies by
+environment is the namespace, which comes from `config.yaml`.
+
+That means **staging is not a lower-scale rehearsal of prod — it is prod's
+configuration in a different namespace**: same autoscaling floor, same resource
+requests, same ingress host and TLS secret. If you later need staging to differ,
+reintroduce a layer between 2 and 3 rather than special-casing the chart.
+
+Layer 3 exists for the cases where two prod clusters genuinely differ. For
 `canary-app` that is the regional ingress hostname and the `CLUSTER`/`REGION`
-config values — see `environments/prod/canary-app/values-cluster-{a,b}.yaml`.
-Keep it to what actually differs; anything shared belongs in layer 3 where it
+config values — see `environments/prod/canary-app/overrides-cluster-{a,b}.yaml`.
+Keep it to what actually differs; anything shared belongs in layer 2 where it
 cannot drift between clusters.
 
 Helm **replaces** lists rather than merging them, so a per-cluster file that
 touches `ingress.hosts` must restate the whole list, including the shared
 entries. Maps (like `config`) do merge.
 
-Note that layer 3 applies to *each* cluster: `replicaCount: 3` in a prod values
-file means 3 replicas on cluster-a and 3 on cluster-b, 6 in total.
+Note that layer 2 applies to *each* cluster: `autoscaling.minReplicas: 3` means a
+floor of 3 replicas on cluster-a and 3 on cluster-b, 6 in total.
 
-Layers 3 and 4 live outside the chart directory, so the Application uses **two
+Layer 3 lives outside the chart directory, so the Application uses **two
 sources**: the chart, plus the same repo again with `ref: values` purely so the
-values files can be addressed as `$values/environments/...`. That is Argo CD's
-supported way to reference a file outside the chart path.
+per-cluster file can be addressed as `$values/environments/...`. That is Argo
+CD's supported way to reference a file outside the chart path.
 
 Reproduce what a given cluster will get:
 
 ```bash
+# every cluster with no per-cluster file, including all of staging
+helm template canary-app helm/canary-app --namespace canary-prod
+
 # exactly what cluster-a will receive
 helm template canary-app helm/canary-app \
-  -f environments/prod/canary-app/values.yaml \
-  -f environments/prod/canary-app/values-cluster-a.yaml \
+  -f environments/prod/canary-app/overrides-cluster-a.yaml \
   --namespace canary-prod
 
 # diff two prod clusters
 diff <(helm template canary-app helm/canary-app \
-        -f environments/prod/canary-app/values.yaml \
-        -f environments/prod/canary-app/values-cluster-a.yaml --namespace canary-prod) \
+        -f environments/prod/canary-app/overrides-cluster-a.yaml --namespace canary-prod) \
      <(helm template canary-app helm/canary-app \
-        -f environments/prod/canary-app/values.yaml \
-        -f environments/prod/canary-app/values-cluster-b.yaml --namespace canary-prod)
+        -f environments/prod/canary-app/overrides-cluster-b.yaml --namespace canary-prod)
 ```
 
 ## Why two ApplicationSets
@@ -169,11 +178,13 @@ Repo-specific values are placeholders and need replacing:
   quickest check.
 - The staging cluster name is assumed, not known — nothing here hardcodes it,
   but the `argocd cluster add` example uses `cluster-s`.
-- Hostnames are `*.example.com`, and the regions in the per-cluster values files
-  (`ap-south-1`, `ap-southeast-1`) are placeholders. Both prod clusters serve the
-  shared `canary.example.com` plus a per-cluster `canary-{a,b}.example.com`,
+- Both prod clusters serve the top-level `demo.fynd.dev` plus a regional
+  hostname — `in.demo.fynd.dev` on cluster-a, `us.demo.fynd.dev` on cluster-b —
   which assumes active/active behind a global load balancer. If that is not the
   topology, drop the shared host from the per-cluster files.
+- The regions in the per-cluster files are still placeholders, and cluster-b's
+  `ap-southeast-1` (Singapore) does not match the `us.` hostname it serves.
+  Fix one or the other before this reaches DNS.
 - Both prod clusters reference the same `canary-app-tls` secret name, but each
   covers a different SAN list — they are separate certificates in separate
   clusters, issued by cert-manager per cluster.

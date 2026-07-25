@@ -16,9 +16,8 @@ argocd/
 
 environments/
 └── <env>/<app>/
-    ├── config.yaml              # registers the app in that env
-    ├── values.yaml              # env-specific Helm overrides
-    └── values-<cluster>.yaml    # optional per-cluster overrides
+    ├── config.yaml                 # registers the app in that env
+    └── overrides-<cluster>.yaml    # optional per-cluster overrides
 ```
 
 Charts describe *what* an app is. `environments/` describes *where* it runs and
@@ -108,22 +107,23 @@ app: my-app
 env: staging
 chartPath: helm/my-app
 namespace: my-app-staging
-project: apps-staging
+argoProject: apps-staging
 ```
 
 No cluster is named — the ApplicationSet fans the app out to every cluster
 labelled for that environment.
 
-Add `values.yaml` alongside it with the environment's overrides, and optionally
-`values-<cluster>.yaml` for settings that differ between clusters. Namespaces
-must match the pattern allowed by the AppProject — `*-staging` or `*-prod`.
-Introducing a third environment means a new AppProject and ApplicationSet pair
-under `argocd/`.
+That is the whole registration — there is no per-environment values file. All
+values live in the chart's `values.yaml`, so the app deploys the same
+configuration in every environment; only the namespace differs. Optionally add
+`overrides-<cluster>.yaml` for settings that differ between clusters within an
+environment. Namespaces must match a pattern allowed by the AppProject's
+`destinations`. Introducing a third environment means a new AppProject and
+ApplicationSet pair under `argocd/`.
 
 Preview exactly what Argo CD will apply:
 
 ```bash
 helm template my-app helm/my-app \
-  -f environments/staging/my-app/values.yaml \
   --namespace my-app-staging
 ```

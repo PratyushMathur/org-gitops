@@ -1,31 +1,31 @@
 # cluster-b overrides for canary-app in prod.
 #
-# Layered on top of environments/prod/canary-app/values.yaml by the apps-prod
-# ApplicationSet. Only settings that genuinely differ between prod clusters
-# belong here - anything shared stays in values.yaml so it cannot drift.
+# Layered on top of helm/canary-app/values.yaml by the apps-prod ApplicationSet.
+# Only settings that genuinely differ between prod clusters belong here -
+# anything shared stays in the chart's values.yaml so it cannot drift.
 #
 # Helm REPLACES lists rather than merging them, so ingress.hosts and ingress.tls
 # are restated in full below. Maps (like config) do merge.
 
 config:
   CLUSTER: cluster-b
-  REGION: ap-southeast-1
+  REGION: us-central1
 
 ingress:
   hosts:
     # Shared active/active endpoint, resolved to a cluster by the global load
     # balancer. Present on both prod clusters.
-    - host: canary.example.com
+    - host: demo.fynd.dev
       paths:
         - path: /
           pathType: Prefix
-    # Cluster-specific endpoint, for targeted smoke tests and failover cutover.
-    - host: canary-b.example.com
+    # Regional endpoint, for targeted smoke tests and failover cutover.
+    - host: us.demo.fynd.dev
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: canary-app-tls
       hosts:
-        - canary.example.com
-        - canary-b.example.com
+        - demo.fynd.dev
+        - us.demo.fynd.dev

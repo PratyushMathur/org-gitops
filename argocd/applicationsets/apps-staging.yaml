@@ -45,19 +45,21 @@ spec:
       project: "{{.argoProject}}"
 
       sources:
-        # The chart. Its values.yaml holds the app-wide defaults; the env files
-        # below layer on top.
+        # The chart's values.yaml is the whole configuration. There is no staging
+        # overrides file: staging deploys the same values as prod, differing only
+        # in the namespace from config.yaml.
         - repoURL: https://github.com/PratyushMathur/org-gitops.git
           targetRevision: HEAD
           path: "{{.chartPath}}"
           helm:
             releaseName: "{{.app}}"
             ignoreMissingValueFiles: true
+            # Only a per-cluster layer remains, and no staging cluster has one
+            # yet. Kept so adding one needs no change here.
             valueFiles:
-              - $values/environments/{{.env}}/{{.app}}/values.yaml
-              - $values/environments/{{.env}}/{{.app}}/values-{{.nameNormalized}}.yaml
+              - $values/environments/{{.env}}/{{.app}}/overrides-{{.nameNormalized}}.yaml
         # Second source exists only to expose the repo as $values above, so the
-        # env overrides can live outside the chart directory.
+        # per-cluster overrides can live outside the chart directory.
         - repoURL: https://github.com/PratyushMathur/org-gitops.git
           targetRevision: HEAD
           ref: values
