@@ -4,5 +4,8 @@
 app: canary-app
 env: prod
 chartPath: helm/canary-app
-namespace: canary-prod
-project: apps-prod
+namespace: default
+# Named argoProject, not project: the cluster generator also emits a `project`
+# parameter (empty unless the cluster Secret is project-scoped) and in a matrix
+# generator it would shadow this value.
+argoProject: apps-prod

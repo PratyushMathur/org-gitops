@@ -40,7 +40,9 @@ spec:
         # deliberately absent from the prod set.
         - resources-finalizer.argocd.argoproj.io
     spec:
-      project: "{{.project}}"
+      # .argoProject, not .project: the clusters generator emits its own empty
+      # `project` param that would otherwise shadow the value from config.yaml.
+      project: "{{.argoProject}}"
 
       sources:
         # The chart. Its values.yaml holds the app-wide defaults; the env files

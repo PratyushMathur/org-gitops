@@ -3,3 +3,7 @@
 helm/*/charts/
 
 .DS_Store
+
+# Agent scratchpad. A literal directory named "~" that gets created in the repo
+# root when a tool resolves "~/tmp/..." as a relative path.
+/~/

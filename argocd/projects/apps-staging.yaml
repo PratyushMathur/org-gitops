@@ -14,7 +14,7 @@ spec:
   # not warrant the explicit allowlist that apps-prod carries.
   destinations:
     - name: "*"
-      namespace: "*-staging"
+      namespace: "*"
 
   # Apps are namespaced-only. Namespace itself is allowed so the
   # CreateNamespace=true sync option can do its job.

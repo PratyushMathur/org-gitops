@@ -13,13 +13,19 @@ spec:
   # destination.name. The label env=prod is how clusters are *discovered*; this
   # list is what they are *authorised* for. Adding a prod cluster is therefore
   # deliberately two steps: label the cluster Secret, then add it here.
-  # Replace both entries with `- name: "*"` if you would rather the label alone
-  # be sufficient.
+  # Replace the list with a single `- name: "*"` if you would rather the label
+  # alone be sufficient.
   destinations:
     - name: cluster-a
-      namespace: "*-prod"
+      namespace: "*"
     - name: cluster-b
-      namespace: "*-prod"
+      namespace: "*"
+    # The Argo CD control plane's own cluster. It is currently labelled env=prod,
+    # so the apps-prod ApplicationSet targets it; without this entry the generated
+    # Application is refused with a "not permitted in project" error. Drop it once
+    # the real workload clusters are registered under their own names.
+    - name: in-cluster
+      namespace: "*"
 
   clusterResourceWhitelist:
     - group: ""

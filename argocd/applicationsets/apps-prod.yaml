@@ -45,7 +45,9 @@ spec:
         cluster: "{{.nameNormalized}}"
       # No resources-finalizer: deleting a prod Application must not cascade.
     spec:
-      project: "{{.project}}"
+      # .argoProject, not .project: the clusters generator emits its own empty
+      # `project` param that would otherwise shadow the value from config.yaml.
+      project: "{{.argoProject}}"
 
       sources:
         - repoURL: https://github.com/PratyushMathur/org-gitops.git

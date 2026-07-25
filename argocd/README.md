@@ -35,8 +35,13 @@ app: canary-app
 env: staging
 chartPath: helm/canary-app
 namespace: canary-staging
-project: apps-staging
+argoProject: apps-staging
 ```
+
+The AppProject key is `argoProject`, not `project`, because the cluster
+generator contributes a `project` parameter of its own — empty unless the
+cluster Secret is project-scoped — and in a matrix generator it shadows
+anything of the same name coming from `config.yaml`.
 
 Adding an app to an environment is one new directory. Nothing in `argocd/`
 changes.
