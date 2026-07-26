@@ -95,6 +95,22 @@ spec:
         name: "{{.name}}"
         namespace: "{{.namespace}}"
 
+      # Argo Rollouts writes `rollouts-pod-template-hash` into the selector of
+      # the stable and canary Services as a rollout progresses — that injected
+      # selector is how the two Services address different ReplicaSets, and it
+      # is the whole traffic-splitting mechanism. No chart declares it, so Argo
+      # read it as drift and a sync would have stripped it back out.
+      #
+      # Scoped by field manager rather than by path: this ignores only what
+      # `rollouts-controller` actually owns, so Services in charts that are not
+      # Rollouts (gateway, regional-data) still diff their selector normally.
+      # `jsonPointers: [/spec/selector]` would have blinded those too.
+      ignoreDifferences:
+        - group: ""
+          kind: Service
+          managedFieldsManagers:
+            - rollouts-controller
+
       # No `automated` block: prod syncs are triggered by a human or a pipeline,
       # per cluster, so a bad release can be stopped after the first one.
       # Drift still shows up as OutOfSync in the UI.
