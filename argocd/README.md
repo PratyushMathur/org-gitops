@@ -85,7 +85,7 @@ comes from `config.yaml`.
 
 That is a deliberate constraint on any environment added later: it would be
 prod's configuration in a different namespace, not a lower-scale rehearsal —
-same autoscaling floor, same resource requests. If one genuinely needs to
+same replica count, same resource requests. If one genuinely needs to
 differ, reintroduce a layer between 2 and 3 rather than special-casing the
 chart.
 
@@ -96,9 +96,10 @@ Layer 3 exists for the cases where two prod clusters genuinely differ. For
 Keep it to what actually differs; anything shared belongs in layer 2 where it
 cannot drift between clusters.
 
-`company` uses it for one more thing: `canary.weight` is 20 in `in` and 5 in
-`us`, because rolling a canary out region by region is exactly the kind of
-difference this layer is for. `regional-data` is the opposite case and has no
+`company` uses it for one more thing: `rollout.steps` opens at 20% in `in` and
+5% in `us`, because rolling a canary out region by region is exactly the kind of
+difference this layer is for. Layer 3 also carries `image.tag`, written by
+org-apps CI on every push to main. `regional-data` is the opposite case and has no
 layer-3 file at all — every cluster gets an identical release, and the data is
 separate because the clusters are.
 
@@ -106,8 +107,8 @@ Helm **replaces** lists rather than merging them, so a per-cluster file that
 touches `httpRoute.hostnames` must restate the whole list, including the shared
 entries. Maps (like `config`) do merge.
 
-Note that layer 2 applies to *each* cluster: `autoscaling.minReplicas: 3` means a
-floor of 3 replicas on cluster-a and 3 on cluster-b, 6 in total.
+Note that layer 2 applies to *each* cluster: `replicaCount: 3` means 3 replicas on
+cluster-a and 3 on cluster-b, 6 in total.
 
 Layer 3 lives outside the chart directory, so the Application uses **two
 sources**: the chart, plus the same repo again with `ref: values` purely so the

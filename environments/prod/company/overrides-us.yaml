@@ -1,26 +1,19 @@
-# US (us-central1) — applied to any prod cluster labelled region=us.
-#
-# Layered on top of helm/company/values.yaml. Helm replaces lists, so
-# httpRoute.hostnames is written out in full. Maps like config merge.
+# US (us-central1) — prod clusters labelled region=us.
+# Layered over helm/company/values.yaml. Helm replaces lists, so hostnames and
+# rollout.steps are written out in full; maps like config merge.
 
 config:
   REGION: us-central1
   CLUSTER: cluster-b
 
-# See overrides-in.yaml, including why there is a second, uglier name and what
-# hard-coding the address in it gives up. `api-us` is this region's reserved
-# address.
+# See overrides-in.yaml. `api-us` is this region's reserved address.
 httpRoute:
   hostnames:
     - api-us.pynd.dev
     - api-us.34.72.1.107.sslip.io
 
-# Same release, walked more cautiously here. India opens at 20%; the US starts at
-# 5% and adds a step, so a regression has two chances to be caught before the
-# larger region carries half the traffic. Rolling a release out one region at a
-# time is exactly why this file exists.
-#
-# Helm replaces lists, so the whole step list is restated rather than patched.
+# Slower than India's 20/50, so a regression has two chances to be caught before
+# the larger region carries half the traffic.
 rollout:
   steps:
     - setWeight: 5
@@ -30,12 +23,7 @@ rollout:
     - setWeight: 50
     - pause: {}
 
-# The image this region runs, written by org-apps CI on every push to main. CI
-# writes the same tag here and in overrides-in.yaml in a single commit, so the two
-# clusters are never knowingly on different images — the caution above is spent on
-# how fast traffic shifts, not on which build each region gets.
-#
-# See company/overrides-in.yaml for why this is a commit sha, and for why the
-# chart's own image.tag no longer decides what prod runs.
+# Written by org-apps CI on every push to main (short commit sha), same tag as
+# overrides-in.yaml in the same commit.
 image:
   tag: "8ae0ec5"

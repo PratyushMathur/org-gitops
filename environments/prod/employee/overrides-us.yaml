@@ -1,7 +1,6 @@
-# US (us-central1) — applied to any prod cluster labelled region=us.
-#
-# Layered on top of helm/employee/values.yaml. Helm replaces lists, so
-# httpRoute.hostnames is written out in full. Maps like config merge.
+# US (us-central1) — prod clusters labelled region=us.
+# Layered over helm/employee/values.yaml. Helm replaces lists, so hostnames are
+# written out in full; maps like config merge.
 
 config:
   REGION: us-central1
@@ -13,8 +12,6 @@ httpRoute:
     - api-us.pynd.dev
     - api-us.34.72.1.107.sslip.io
 
-# The image this region runs, written by org-apps CI on every push to main. See
-# company/overrides-in.yaml for why the tag is a commit sha, why both regions
-# carry this key, and what overwrites it.
+# Written by org-apps CI on every push to main (short commit sha).
 image:
   tag: "8ae0ec5"

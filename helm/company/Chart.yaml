@@ -9,7 +9,7 @@ appVersion: "1.0.0"
 
 dependencies:
   - name: base
-    version: 0.4.0
+    version: 0.5.0
     # Resolved from this repo — Argo CD's repo-server checks out the whole
     # repository and runs `helm dependency build`.
     repository: "file://../base"

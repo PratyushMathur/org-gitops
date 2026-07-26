@@ -36,25 +36,19 @@ dependencies:
 Then `helm dependency update .` once, and commit the resulting `Chart.lock`.
 
 Charts needing finer control can skip `base.all` and include the individual
-templates instead (`base.deployment`, `base.service`, `base.ingress`,
-`base.httproute`, `base.hpa`, `base.pdb`, `base.configmap`,
-`base.serviceaccount`), alongside their own hand-written templates in the same
-directory.
+templates instead (`base.deployment`, `base.rollout`, `base.service`,
+`base.httproute`, `base.gateway`, `base.configmap`, `base.serviceaccount`),
+alongside their own hand-written templates in the same directory.
 
 ## Getting traffic in
 
-Two north-south paths, both off by default. Enable exactly one.
+`httpRoute` is the only north-south path, off by default. It renders an
+`HTTPRoute` that attaches to a `Gateway` someone else owns (`helm/gateway`), so
+enabling it creates no load balancer of its own. A canary split is expressed as
+weighted `backendRefs` on that one object.
 
-| | `ingress` | `httpRoute` |
-| --- | --- | --- |
-| Object | `Ingress` | `HTTPRoute` |
-| Needs | an Ingress controller in-cluster | a `Gateway` to attach to |
-| Creates the LB | the controller | the Gateway, not the route |
-| Canary split | second Ingress, nginx annotations | weighted `backendRefs`, one object |
-
-The prod clusters run neither ingress-nginx nor cert-manager; they front apps
-with the GKE Gateway, so `company` and `employee` use `httpRoute`. `ingress` is
-kept for clusters that do run a controller.
+The Ingress path was removed in base 0.5.0: the prod clusters run neither
+ingress-nginx nor cert-manager and front apps with the GKE Gateway instead.
 
 ```yaml
 httpRoute:
@@ -142,69 +136,6 @@ start, so after a promotion — when Rollouts relabels the pods `stable` — the
 processes keep reporting `canary` until they are replaced. Read it as "the track
 this pod was introduced in".
 
-## Canary releases (self-managed)
-
-The older path, kept for charts not on Rollouts. `base.all` renders the stable
-track. `base.canary` renders a second, smaller copy of the same workload —
-ConfigMap, Deployment, Service, and on the Ingress path a second Ingress —
-behind a weighted split that only moves when someone edits git:
-
-```yaml
-# templates/all.yaml
-{{ include "base.all" . }}
-{{ include "base.canary" . }}
-```
-
-```yaml
-# values.yaml
-canary:
-  enabled: true
-  weight: 20          # percent of north-south traffic
-  image:
-    tag: "2.0.0"
-```
-
-Where the weight is expressed depends on the path in use. With `httpRoute` it
-becomes weighted `backendRefs` inside the app's single route — Gateway API takes
-weights natively, so no second routing object is rendered:
-
-```yaml
-rules:
-  - matches: [{path: {type: PathPrefix, value: /companies}}]
-    backendRefs:
-      - {name: company,        port: 80, weight: 80}
-      - {name: company-canary, port: 80, weight: 20}
-```
-
-With `ingress` it becomes a second Ingress carrying ingress-nginx's
-`canary-weight` annotations, described below.
-
-Everything under `canary` except the control keys (`enabled`, `weight`,
-`header`, `headerValue`) is deep-merged over the stable values, so the canary
-inherits probes, resources and config unless it deliberately differs. Defaults
-give it one replica, no HPA and no PDB — it exists to be observed, not to carry
-load.
-
-The canary gets its own `app.kubernetes.io/name`, which is what keeps its pods
-out of the stable Service. Two consequences worth knowing:
-
-- **The split is north-south only.** In-cluster callers resolve the stable
-  Service and never reach the canary. That is deliberate — a canary should not
-  silently take east-west traffic nobody is watching.
-- **cert-manager annotations are stripped** from the canary Ingress, which
-  otherwise would request a second certificate for hosts the stable Ingress
-  already owns. The canary reuses the stable TLS secret. (Ingress path only —
-  an HTTPRoute renders no second object to strip anything from.)
-
-`canary.header` (default `X-Canary`) makes the new version reachable
-deterministically — `curl -H "X-Canary: always"` — instead of only by chance.
-Confirming a 5% canary otherwise means issuing enough requests to be
-statistically sure. On the Ingress path this is the `canary-by-header`
-annotation; on the HTTPRoute path it is an extra rule carrying a header match.
-Gateway API ranks matches by specificity rather than order, and a rule with
-header matches always outranks one without, so the header wins over the weight
-either way.
-
 ## VERSION and TRACK
 
 Any chart that sets `config` gets two keys injected into its ConfigMap:
@@ -244,7 +175,6 @@ These are the defaults that differ from a stock `helm create`:
 | `securityContext` | drop `ALL`, no privilege escalation, read-only rootfs | Baseline hardening. |
 | `resources` | requests set; **memory limit only** | CPU limits throttle rather than protect. |
 | `ports[0].containerPort` | `8080` | Non-root images cannot bind `:80`. |
-| `pdb.enabled` | `false` | A PDB over a single replica blocks node drains. |
 
 ## Values reference
 
@@ -262,10 +192,7 @@ table above, the notable keys are:
   template so pods roll when it changes. `VERSION` and `TRACK` are injected —
   see above. For file-style config, declare a ConfigMap under `extraObjects`
   and mount it via `volumes`/`volumeMounts`.
-- `canary` — opt-in second track. See the canary section above.
 - `ports` — container ports. `service.ports` and probes refer to them by name.
-- `ingress.hosts[].paths[]` — `path`, `pathType` (default `Prefix`), and
-  optional `servicePort` (name or number, defaults to `http`).
 - `httpRoute.paths[]` — the same three keys, except `pathType` defaults to
   `PathPrefix` and also accepts Ingress's `Prefix` spelling. `httpRoute.hostnames`
   is a top-level list, not per-path as on an Ingress.

@@ -1,9 +1,12 @@
-# Registers the company service in prod. No cluster is named on purpose — the
-# ApplicationSet deploys it to every cluster labelled env=prod.
+# Registers company in prod. Names no cluster: the ApplicationSet deploys it to
+# every cluster labelled env=prod.
 app: company
 env: prod
 chartPath: helm/company
 namespace: demo
-# argoProject, not project: the cluster generator emits its own empty `project`
-# parameter that would shadow this one.
+# argoProject, not project: the cluster generator emits an empty `project` that
+# would shadow this one.
 argoProject: apps-prod
+# Sync as soon as CI promotes a tag into overrides-<region>.yaml. This starts the
+# canary; the rollout's own pause still gates finishing it.
+autoSync: true

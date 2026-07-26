@@ -1,19 +1,12 @@
 {{/*
-HTTPRoute — an app's slice of the shared Gateway.
+HTTPRoute — an app's slice of the shared Gateway. It creates no load balancer; it
+attaches to the Gateway named in `httpRoute.parentRefs` and claims hostnames and
+paths on it.
 
-This replaces `base.ingress` for anything fronted by the GKE Gateway. The route
-does not create a load balancer; it attaches to the Gateway named in
-`httpRoute.parentRefs` and claims a set of hostnames and paths on it.
-
-Two apps attached to the same Gateway must not claim the same hostname AND the
-same path — Gateway API resolves that conflict by creation timestamp, so the
-loser silently stops serving. Because both prod clusters expose a single
-hostname (api-ind / api-us), the apps are separated by path prefix instead:
-`company` owns /companies, `employee` owns /employees.
-
-Canary traffic splitting lives here rather than in a second object. Gateway API
-takes weights natively on `backendRefs`, so one route describes the whole split
-— see the comment on the weighted rule below.
+Two apps on the same Gateway must not claim the same hostname AND path — Gateway
+API resolves that by creation timestamp, so the loser silently stops serving.
+Both prod clusters expose one hostname, so apps are separated by path instead:
+company owns /companies, employee owns /employees.
 */}}
 {{- define "base.httproute" -}}
 {{- $v := fromYaml (include "base.values" .) -}}
@@ -42,8 +35,7 @@ spec:
 {{- end -}}
 
 {{/*
-Resolves a Service port given either its name or its number, so `servicePort`
-can be written the same way it is on an Ingress backend. Takes a dict:
+Resolves a Service port given either its name or its number. Takes a dict:
   (dict "ctx" $ "port" .servicePort)
 */}}
 {{- define "base.httproute.portNumber" -}}
@@ -66,32 +58,15 @@ can be written the same way it is on an Ingress backend. Takes a dict:
 {{- end -}}
 
 {{/*
-The rule list. One weighted rule per configured path, optionally preceded by a
-header-match rule that pins a request to the canary.
+One rule per configured path, preceded on the Rollout path by a header-match rule
+pinning a request to the canary.
 */}}
 {{- define "base.httproute.rules" -}}
 {{- $ctx := . -}}
 {{- $v := fromYaml (include "base.values" $ctx) -}}
 {{- $fullName := include "base.fullname" $ctx -}}
 {{- $canaryName := printf "%s-canary" $fullName -}}
-{{- $canary := $v.canary | default dict -}}
 {{- $rollout := $v.rollout | default dict -}}
-{{/*
-On the Rollout path the split is not ours to describe. The route still has to
-carry BOTH backends from the start — the Gateway API plugin rewrites the weights
-of backends that are already there, it does not add them — so it is written as
-100/0 and the controller moves it from there. Treating this as `canary.enabled`
-with weight 0 keeps one code path for the rule shape.
-*/}}
-{{- if $rollout.enabled -}}
-{{- $canary = dict "enabled" true "weight" 0 "header" $canary.header "headerValue" $canary.headerValue -}}
-{{- end -}}
-{{- $weight := $canary.weight | default 0 | int -}}
-{{- if and $canary.enabled (not $rollout.enabled) -}}
-{{- if or (lt $weight 0) (gt $weight 100) -}}
-{{- fail (printf "canary.weight must be between 0 and 100, got %d" $weight) -}}
-{{- end -}}
-{{- end -}}
 {{- $rules := list -}}
 {{- range $v.httpRoute.paths -}}
 {{/* Ingress spells this "Prefix"; Gateway API spells it "PathPrefix". */}}
@@ -102,28 +77,28 @@ with weight 0 keeps one code path for the rule shape.
 {{- $port := include "base.httproute.portNumber" (dict "ctx" $ctx "port" .servicePort) | int -}}
 {{- $match := dict "path" (dict "type" $pathType "value" (.path | default "/")) -}}
 {{/*
-The header rule comes first for readability only. Gateway API ranks matches by
-specificity, not by order, and a rule carrying header matches always outranks
-one that does not — so `curl -H "X-Canary: always"` is deterministic proof the
-canary is live, independent of the weight.
+Gateway API ranks matches by specificity, not order, and a rule carrying header
+matches always outranks one that does not — so `curl -H "X-Canary: always"` is
+deterministic proof the canary is live, independent of the weight.
 */}}
-{{- if and $canary.enabled $canary.header -}}
+{{- if and $rollout.enabled $rollout.header -}}
 {{- $headerMatch := merge (dict "headers" (list (dict
-      "name" $canary.header
-      "value" ($canary.headerValue | default "always")))) (deepCopy $match) -}}
+      "name" $rollout.header
+      "value" ($rollout.headerValue | default "always")))) (deepCopy $match) -}}
 {{- $rules = append $rules (dict
       "matches" (list $headerMatch)
       "backendRefs" (list (dict "name" $canaryName "port" $port))) -}}
 {{- end -}}
 {{/*
-Weights are relative, not percentages, but they are written to sum to 100 so the
-rendered manifest reads as the percentage split it is meant to be.
+Both backends have to be present from the start: the Gateway API plugin rewrites
+the weights of backends already on the route, it does not add them. Written 100/0
+and the controller moves it from there.
 */}}
 {{- $backendRefs := list (dict "name" $fullName "port" $port) -}}
-{{- if $canary.enabled -}}
+{{- if $rollout.enabled -}}
 {{- $backendRefs = list
-      (dict "name" $fullName  "port" $port "weight" (sub 100 $weight))
-      (dict "name" $canaryName "port" $port "weight" $weight) -}}
+      (dict "name" $fullName   "port" $port "weight" 100)
+      (dict "name" $canaryName "port" $port "weight" 0) -}}
 {{- end -}}
 {{- $rules = append $rules (dict "matches" (list $match) "backendRefs" $backendRefs) -}}
 {{- end -}}

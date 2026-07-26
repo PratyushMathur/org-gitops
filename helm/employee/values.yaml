@@ -9,6 +9,7 @@ partOf: demo
 
 image:
   repository: us-docker.pkg.dev/fynd-project-trial/apps/employee
+  # Overridden per region by CI; this is only the fallback.
   tag: "1.0.0"
 
 podSecurityContext:
@@ -31,21 +32,15 @@ envFrom:
 
 config:
   # The company service in THIS cluster, so the global lookup is genuinely made
-  # from this region. (In-cluster traffic always reaches the stable pods; the
-  # canary split happens at the ingress.)
+  # from this region. In-cluster traffic always reaches the stable pods.
   COMPANY_API_URL: "http://company"
 
 # DEMO PASSWORD in git — see helm/company/values.yaml.
 #
-# `regional-postgres.internal` is this region's own Cloud SQL instance
-# (org-infra `data.cloud_sql.instances.regional-*`). The name exists only in the
-# spoke's own `internal.` zone and answers with a PSC endpoint in that same VPC,
-# so it is a different server in each region — which is exactly what makes this
-# tier regional. Contrast global-postgres.internal, which every zone answers
-# with a route to the one shared instance.
-#
-# Redis stays an in-cluster Service name: it is a per-region cache, so one per
-# cluster is the right shape rather than a stand-in for something managed.
+# `regional-postgres.internal` is this region's own Cloud SQL instance. The name
+# exists only in the spoke's own `internal.` zone and answers with a PSC endpoint
+# in that same VPC, so it is a different server in each region — which is what
+# makes this tier regional, as against global-postgres.internal.
 extraObjects:
   - apiVersion: v1
     kind: Secret
@@ -60,6 +55,8 @@ livenessProbe:
   httpGet: { path: /healthz, port: http }
   periodSeconds: 20
 
+# No raised timeout here, unlike company: this service reaches an in-region
+# instance, so the probe does not cross a continent.
 readinessProbe:
   httpGet: { path: /readyz, port: http }
   periodSeconds: 10
@@ -84,15 +81,10 @@ httpRoute:
       pathType: PathPrefix
       servicePort: http
 
-# Progressive delivery through Argo Rollouts — see helm/company/values.yaml.
 # Coarser steps than company: employee is the regional service, so a bad release
-# is already contained to one region and there is less to learn from a 20% dwell.
+# is already contained to one region.
 rollout:
   enabled: true
   steps:
     - setWeight: 50
     - pause: {}
-
-# The older self-managed canary. Mutually exclusive with `rollout`.
-canary:
-  enabled: false

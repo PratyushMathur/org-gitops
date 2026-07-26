@@ -1,61 +1,23 @@
-# India (asia-south1) — applied to any prod cluster labelled region=in.
-#
-# Layered on top of helm/company/values.yaml. Helm replaces lists, so
-# httpRoute.hostnames is written out in full. Maps like config merge.
+# India (asia-south1) — prod clusters labelled region=in.
+# Layered over helm/company/values.yaml. Helm replaces lists, so hostnames are
+# written out in full; maps like config merge.
 
-# What the service reports as its region, and what it stamps on every company
-# row it writes — which is how a company added here is still attributable when
-# it's read back from the US.
+# Stamped on every row the service writes, so a company added here stays
+# attributable when it is read back from the US.
 config:
   REGION: asia-south1
   CLUSTER: cluster-a
 
-# The region's own hostname, resolved by the A record Terraform publishes for the
-# static IP this cluster's Gateway claims. There is no shared name across both
-# clusters any more: the previous company.demo.fynd.dev needed a global load
-# balancer in front of two regional ones, and nothing serves it today.
-#
-# Two names, both served. pynd.dev is not a registered domain, so the first one
-# answers NXDOMAIN everywhere and will keep doing so until someone buys it; it
-# stays here so nothing has to be rewritten on the day that happens. The second
-# works today: sslip.io is a public wildcard resolver that hands back whatever
-# IP is spelled out in the name, with no zone, registration or delegation
-# involved.
-#
-# Note what that costs. The address is no longer hidden behind the name — this
-# line hard-codes the reserved google_compute_address `api-ind`, so if Terraform
-# ever recreates it, this file has to be edited in step. That is exactly the
-# indirection environments/prod/gateway/overrides-in.yaml is describing when it
-# says the name, not the address, is what travels between the repos.
+# pynd.dev is unregistered and answers NXDOMAIN; it stays so nothing needs
+# rewriting the day someone buys it. The sslip.io name works today — it resolves
+# to the IP spelled out in it, with no DNS zone. That hard-codes the reserved
+# address `api-ind`, so this line has to change if Terraform recreates it.
 httpRoute:
   hostnames:
     - api-ind.pynd.dev
     - api-ind.34.93.125.151.sslip.io
 
-# Canary weight stays at the chart's 20% here. India leads the rollout.
-
-# The image this region runs, written by org-apps CI on every push to main (job
-# `promote` in .github/workflows/build-services.yml). Both regions carry this key
-# and CI writes the same tag to both, so the two clusters are never knowingly on
-# different images.
-#
-# What still makes India lead is the weight ladder, not the tag: this region opens
-# at 20% while overrides-us.yaml opens at 5% and takes an extra step. Both regions
-# pause for a human `kubectl argo rollouts promote`, so the release advances one
-# cluster at a time even though the tag lands in both files in one commit.
-#
-# Because both regions pin the tag here, helm/company/values.yaml `image.tag` no
-# longer decides what prod runs. It is the fallback for a cluster with no `region`
-# label (overrides-none.yaml does not exist and is skipped) and for a bare
-# `helm template`. Expect it to read older than what is deployed.
-#
-# A short commit sha, not a version or `latest`: it is what every build pushes,
-# it traces straight back to a commit, and a moving tag would make the rollout
-# unreproducible. base.versionLabel derives VERSION from it, so the app reports
-# the same string it was built from.
-#
-# CI rewrites the `tag:` line below and nothing else. Editing it by hand works
-# and is how you would roll this region back, but the next push to main
-# overwrites it.
+# Written by org-apps CI on every push to main (short commit sha). Overrides the
+# chart's image.tag, which will therefore read older than what is deployed.
 image:
   tag: "8ae0ec5"

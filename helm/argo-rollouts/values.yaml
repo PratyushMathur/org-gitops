@@ -1,29 +1,23 @@
 # argo-rollouts — the progressive-delivery controller.
 #
-# Everything here is passed through to the upstream chart under its own key.
-# This file holds only what differs from its defaults.
+# Everything here is passed through to the upstream chart under its own key. This
+# file holds only what differs from its defaults.
 
 argo-rollouts:
-  # The CRDs are the API the app charts render against, so the controller has to
-  # own them. keepCRDs means uninstalling the controller does not delete every
-  # Rollout object in the cluster along with it.
+  # The CRDs are the API the app charts render against, so the controller owns
+  # them. keepCRDs means uninstalling it does not delete every Rollout object.
   installCRDs: true
   keepCRDs: true
   clusterInstall: true
 
   controller:
-    # The Gateway API traffic router. Argo Rollouts ships routers for Istio,
-    # SMI, ALB and nginx in-tree, but Gateway API support lives out-of-tree in
-    # argoproj-labs, so it is loaded as a plugin.
+    # Gateway API support lives out-of-tree in argoproj-labs, so it is a plugin.
+    # The controller downloads the binary at startup and will not go ready without
+    # egress to github.com. Pinned: `latest` would let a restart silently change
+    # how traffic is shifted.
     #
-    # The controller downloads this binary at startup and will not become ready
-    # if it cannot — the nodes need egress to github.com. The version is pinned:
-    # `latest` would mean a controller restart could silently change how traffic
-    # is shifted.
-    #
-    # The name is not free-form. It has to match the key the Rollout's
-    # trafficRouting.plugins map uses, which the plugin itself defines as
-    # `argoproj-labs/gatewayAPI` — see base.rollout in helm/base.
+    # The name must match the key the Rollout's trafficRouting.plugins map uses,
+    # which the plugin defines as `argoproj-labs/gatewayAPI`.
     trafficRouterPlugins:
       - name: "argoproj-labs/gatewayAPI"
         location: "https://github.com/argoproj-labs/rollouts-plugin-trafficrouter-gatewayapi/releases/download/v0.16.0/gatewayapi-plugin-linux-amd64"
@@ -35,24 +29,16 @@ argo-rollouts:
       limits:
         memory: 256Mi
 
-  # The rollout dashboard — the canary control portal. A separate deployment
-  # from the controller, off by default upstream. It is on because promoting or
-  # aborting a canary should not require a laptop with kubectl and cluster
-  # credentials; it is reached over the WireGuard VPN and never from the
-  # internet (see org-infra docs/wireguard-vpn.md).
+  # The canary control portal, off by default upstream. On so promoting or aborting
+  # a canary does not require kubectl and cluster credentials. Reached over the
+  # WireGuard VPN only (org-infra docs/wireguard-vpn.md).
   dashboard:
     enabled: true
 
-    # readonly would deny every mutating verb, which would leave a rollout
-    # *viewer*, not a control portal — promote/abort/retry are the point. The
-    # dashboard has no authentication of its own, so VPN membership is the
-    # entire access control. Keep the peer list short.
+    # readonly would deny every mutating verb, leaving a viewer rather than a
+    # control portal. The dashboard has no authentication of its own, so VPN
+    # membership is the entire access control — keep the peer list short.
     readonly: false
-
-    # createClusterRole (default true) is what lets the UI see the Rollouts in
-    # `demo` rather than only those in its own namespace. Not restated here —
-    # noted because it is the difference between a working portal and an empty
-    # one, and clusterInstall above is a separate switch for the controller.
 
     resources:
       requests:
@@ -62,23 +48,15 @@ argo-rollouts:
         memory: 128Mi
 
     service:
-      # Stays ClusterIP. The frontend is a regional internal ALB owned by
-      # Terraform (org-infra live/prod/cluster-a/data), which reaches these pods
-      # through a standalone NEG — the same split as the `demo` Service and the
-      # global ALB: the chart publishes the NEG, Terraform owns the load
-      # balancer, its internal IP and the rollouts-*.internal DNS name.
-      #
-      # The port key must be the dashboard's service port (3100) and the NEG
-      # name must match data.canary_portal.neg_name in that repo's config.yaml —
-      # a mismatch leaves the backend service pointing at a NEG that never
-      # appears, and Terraform fails at apply.
+      # Stays ClusterIP: a Terraform-owned internal ALB reaches these pods through
+      # a standalone NEG. The port must be the dashboard's service port (3100) and
+      # the NEG name must match data.canary_portal.neg_name in org-infra, or
+      # Terraform fails at apply against a NEG that never appears.
       annotations:
         cloud.google.com/neg: '{"exposed_ports": {"3100": {"name": "rollouts-dashboard-neg"}}}'
 
-# The ServiceAccount the upstream subchart creates for the controller, which the
-# Gateway API plugin's ClusterRoleBinding attaches to. It follows the subchart's
-# fullname, which resolves to the release name here because the ApplicationSet
-# sets releaseName from `app` in environments/prod/argo-rollouts/config.yaml.
-# Restated rather than computed: a named value that is wrong fails loudly at
-# apply time, where a cross-chart template call would quietly bind to nothing.
+# The ServiceAccount the upstream subchart creates, which the Gateway API plugin's
+# ClusterRoleBinding attaches to. Restated rather than computed: a wrong named
+# value fails loudly at apply, where a cross-chart template call would quietly bind
+# to nothing.
 controllerServiceAccount: argo-rollouts

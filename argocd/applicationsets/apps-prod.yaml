@@ -1,7 +1,6 @@
-# Production gets its own ApplicationSet rather than sharing one with other
-# environments. That keeps the sync policy differences explicit instead of hidden
-# in template overrides, and means prod rollouts can be paused or rolled back by
-# touching a single object.
+# Production ApplicationSet: every registered app x every cluster labelled
+# env=prod. Kept separate from other environments so prod's sync policy
+# differences stay explicit.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -11,18 +10,15 @@ spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
 
-  # If this ApplicationSet is ever deleted, leave the running workloads alone.
+  # Deleting this ApplicationSet must leave running workloads alone.
   syncPolicy:
     preserveResourcesOnDeletion: true
 
-  # Every registered app x every prod cluster. Today that is cluster-a and
-  # cluster-b; labelling a third cluster env=prod is enough to roll every app
-  # onto it (it also has to be added to the apps-prod AppProject destinations).
   generators:
     - matrix:
         generators:
-          # Clusters are found by label on their Argo CD cluster Secret, never
-          # by hardcoded API URL:
+          # Clusters are found by label on their Argo CD cluster Secret, never by
+          # hardcoded API URL:
           #   argocd cluster add <context> --name cluster-a --label env=prod
           - clusters:
               selector:
@@ -44,23 +40,14 @@ spec:
         env: "{{.env}}"
         cluster: "{{.nameNormalized}}"
       annotations:
-        # Diff by asking the API server what the manifest would actually change
-        # (a server-side apply dry-run), instead of comparing our rendered YAML
-        # against the stored object field by field.
-        #
-        # Without this, anything the API server defaults reads as drift forever:
-        # the HTTPRoutes came back OutOfSync on `group: ""`, `kind: Service` and
-        # `weight: 1` inside backendRefs, and regional-data on StatefulSet
-        # defaults — none of which any chart writes, and none of which a sync
-        # can fix, so `Synced` stops meaning anything. `kubectl diff` reported no
-        # change for all three, which is precisely the comparison this turns on.
-        #
-        # Needs ServerSideApply, set in syncPolicy.syncOptions below.
+        # Diff via a server-side apply dry-run instead of comparing rendered YAML
+        # field by field. Without it, anything the API server defaults reads as
+        # permanent drift that no sync can fix. Needs ServerSideApply below.
         argocd.argoproj.io/compare-options: ServerSideDiff=true
       # No resources-finalizer: deleting a prod Application must not cascade.
     spec:
-      # .argoProject, not .project: the clusters generator emits its own empty
-      # `project` param that would otherwise shadow the value from config.yaml.
+      # .argoProject, not .project: the clusters generator emits an empty
+      # `project` param that would otherwise shadow config.yaml's value.
       project: "{{.argoProject}}"
 
       sources:
@@ -69,51 +56,46 @@ spec:
           path: "{{.chartPath}}"
           helm:
             releaseName: "{{.app}}"
-            # The per-region file is optional - a region with nothing to override
-            # needs nothing beyond the chart's values.yaml.
             ignoreMissingValueFiles: true
-            # Keyed on the cluster Secret's `region` label, NOT on the cluster
-            # name: the name is an operational detail (the control plane is
-            # always `in-cluster`), while the region is what the overrides
-            # actually describe. `index` rather than .metadata.labels.region so
-            # an unlabelled cluster yields "none" instead of tripping
-            # missingkey=error; overrides-none.yaml does not exist and is
-            # skipped.
-            #
-            # Label a cluster with:
-            #   argocd cluster add <ctx> --name <n> --label env=prod --label region=us
+            # Keyed on the cluster Secret's `region` label, not its name: the name
+            # is an operational detail, the region is what the overrides describe.
+            # `index` rather than .metadata.labels.region so an unlabelled cluster
+            # yields "none" instead of tripping missingkey=error.
             valueFiles:
               - $values/environments/{{.env}}/{{.app}}/overrides-{{ index .metadata.labels "region" | default "none" }}.yaml
-        # Second source exists only to expose the repo as $values above, so the
-        # per-region overrides can live outside the chart directory.
+        # Exists only to expose the repo as $values above, so the per-region
+        # overrides can live outside the chart directory.
         - repoURL: https://github.com/PratyushMathur/org-gitops.git
           targetRevision: HEAD
           ref: values
 
       destination:
-        # Cluster comes from the generator, not from config.yaml.
         name: "{{.name}}"
         namespace: "{{.namespace}}"
 
-      # Argo Rollouts writes `rollouts-pod-template-hash` into the selector of
-      # the stable and canary Services as a rollout progresses — that injected
-      # selector is how the two Services address different ReplicaSets, and it
-      # is the whole traffic-splitting mechanism. No chart declares it, so Argo
-      # read it as drift and a sync would have stripped it back out.
-      #
-      # Scoped by field manager rather than by path: this ignores only what
-      # `rollouts-controller` actually owns, so Services in charts that are not
-      # Rollouts (gateway, regional-data) still diff their selector normally.
-      # `jsonPointers: [/spec/selector]` would have blinded those too.
       ignoreDifferences:
+        # Argo Rollouts injects `rollouts-pod-template-hash` into the stable and
+        # canary Service selectors — that is the traffic-splitting mechanism, and
+        # no chart declares it, so a sync would strip it back out.
         - group: ""
           kind: Service
           managedFieldsManagers:
             - rollouts-controller
+        # The Gateway API plugin rewrites the HTTPRoute's backendRefs weights to
+        # shift traffic. Without this, every canary reads as drift and selfHeal
+        # below would revert the split the controller just wrote.
+        #
+        # Both are scoped by field manager, not path, so charts that are not
+        # Rollouts still diff these fields normally.
+        - group: gateway.networking.k8s.io
+          kind: HTTPRoute
+          managedFieldsManagers:
+            - gatewayAPI
 
-      # No `automated` block: prod syncs are triggered by a human or a pipeline,
-      # per cluster, so a bad release can be stopped after the first one.
-      # Drift still shows up as OutOfSync in the UI.
+      # No `automated` here: it is added per app by templatePatch below, because
+      # `automated` cannot be switched off with field values (an empty
+      # `automated: {}` still enables auto-sync) and `template` is a structured
+      # CRD field, so a conditional around a key is not possible in it.
       syncPolicy:
         syncOptions:
           - CreateNamespace=true
@@ -126,3 +108,24 @@ spec:
             maxDuration: 3m
 
       revisionHistoryLimit: 10
+
+  # Auto-sync per app, from `autoSync` in environments/prod/<app>/config.yaml. On
+  # for company and employee; off for gateway, regional-data and argo-rollouts.
+  # Every config.yaml must set the key — with missingkey=error, an app that omits
+  # it fails to render rather than silently defaulting to unattended prod syncs.
+  #
+  # Auto-sync starts the canary, it does not finish it: India opens at 20%, the US
+  # at 5%, and neither advances past its first step without
+  #   kubectl argo rollouts promote <app> -n demo
+  #
+  # prune stays off so a resource vanishing from a chart cannot delete a running
+  # prod workload. selfHeal reverts manual kubectl edits; the ignoreDifferences
+  # above are what stop it fighting the Rollouts controller.
+  templatePatch: |
+    {{- if .autoSync }}
+    spec:
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: true
+    {{- end }}

@@ -1,62 +1,29 @@
 {{/*
 Rollout — the Argo Rollouts replacement for base.deployment.
 
-Set `rollout.enabled: true` and `base.all` renders an argoproj.io Rollout
-instead of a Deployment, plus a second `<fullname>-canary` Service. Argo
-Rollouts then owns the canary: it creates the canary ReplicaSet when the pod
-template changes, walks `rollout.steps`, and rewrites the weights on the app's
-HTTPRoute through the Gateway API plugin.
+`rollout.enabled: true` makes base.all render an argoproj.io Rollout plus a
+`<fullname>-canary` Service. The controller then owns the canary: it creates the
+canary ReplicaSet when the pod template changes, walks `rollout.steps`, and
+rewrites the weights on the app's HTTPRoute through the Gateway API plugin.
 
-WHAT THIS REPLACES. The older `base.canary` shipped a whole second Deployment
-pinned to a second image tag, with the split written into the HTTPRoute by hand.
-The weight only moved when someone edited git, nothing tied the canary's health
-to whether it kept receiving traffic, and rolling back meant another commit. A
-Rollout makes the progression the controller's job — the chart declares the
-shape of the release, not each step of it.
+The pod template comes from `base.deployment` rather than being restated, so the
+two paths cannot drift. Only the wrapper differs.
 
-The pod template is taken from `base.deployment` rather than restated, so the
-two paths cannot drift: probes, security context, envFrom and sidecars are
-defined once. Only the wrapper differs.
+TRACK is a pod *label*, not a ConfigMap key — both tracks share one pod template.
+It is surfaced through the downward API, and deliberately kept out of the
+selector so the Services match both tracks; Argo Rollouts tells them apart with
+its own `rollouts-pod-template-hash`.
 
-TRACK. Both tracks run the same pod template, so TRACK can no longer come from
-the ConfigMap the way it did when the canary was its own Deployment. Instead
-`track` is a pod *label* — defaulted to `stable` here and overridden to `canary`
-by canaryMetadata below — which is surfaced to the container through the
-downward API. The label is deliberately NOT part of the selector: the Services
-must match both tracks, and Argo Rollouts tells them apart by injecting its own
-`rollouts-pod-template-hash`.
-
-KNOWN WRINKLE: TRACK is a snapshot, not a live value. A downward API *env var*
-is resolved once when the container starts; only a downward API *volume* tracks
-later label changes. On promotion Argo Rollouts relabels the canary pods
-`track=stable`, but the processes inside them keep the value they booted with,
-so a promoted pod goes on reporting `track: canary` until it is replaced. The
-label on the pod is correct; the env var is stale.
-
-Read it as "the track this pod was introduced in", which is what it accurately
-records. Making it live means reading the label from a downward API volume at
-request time, which is an application change, not a chart one.
-
-  templates/all.yaml
-  ---------------------------------
-  {{ include "base.all" . }}
-
-  values.yaml
-  ---------------------------------
-  rollout:
-    enabled: true
-    steps:
-      - setWeight: 20
-      - pause: {}
+KNOWN WRINKLE: TRACK is a snapshot. A downward API env var resolves once at
+container start, so a pod relabelled `track=stable` on promotion keeps reporting
+`canary` until it is replaced. Read it as "the track this pod was introduced in".
+Making it live needs a downward API volume read at request time — an application
+change, not a chart one.
 */}}
 {{- define "base.rollout" -}}
 {{- $v := fromYaml (include "base.values" .) -}}
 {{- if $v.rollout.enabled -}}
 {{- $fullName := include "base.fullname" . -}}
-
-{{- if $v.canary.enabled -}}
-{{- fail "rollout.enabled and canary.enabled are both set: the Rollout controller owns the canary, so the second Deployment base.canary renders would be a duplicate workload behind the same Service. Turn canary.enabled off." -}}
-{{- end -}}
 
 {{- if not $v.httpRoute.enabled -}}
 {{- fail "rollout.enabled requires httpRoute.enabled: the Gateway API traffic router shifts weight by rewriting the app's HTTPRoute, and there is nothing to rewrite without one." -}}
@@ -94,9 +61,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  {{- if not $v.autoscaling.enabled }}
   replicas: {{ $v.replicaCount }}
-  {{- end }}
   revisionHistoryLimit: {{ $v.revisionHistoryLimit }}
   selector:
     matchLabels:

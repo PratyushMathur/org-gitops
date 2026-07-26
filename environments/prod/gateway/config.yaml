@@ -1,12 +1,10 @@
-# Registers the shared Gateway in prod. Like every other app here it names no
-# cluster — the ApplicationSet deploys one Gateway per cluster labelled env=prod,
-# and each picks up its own static IP from overrides-<region>.yaml.
-#
-# Namespace matches the apps it fronts: the Gateway's only listener allows routes
-# from the same namespace, so `demo` keeps the HTTPRoutes attachable without a
-# ReferenceGrant.
+# Registers the shared Gateway in prod, one per cluster labelled env=prod.
+# Namespace matches the apps it fronts: the listener only allows routes from the
+# same namespace, so `demo` keeps HTTPRoutes attachable without a ReferenceGrant.
 app: gateway
 env: prod
 chartPath: helm/gateway
 namespace: demo
 argoProject: apps-prod
+# Synced by hand: no canary sits in front of the cluster's entry point.
+autoSync: false

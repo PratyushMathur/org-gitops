@@ -1,18 +1,12 @@
 # regional-data — the per-region Redis.
 #
-# There are deliberately NO per-region overrides for this chart. Every cluster
-# gets an identical release, and that is the whole point: `regional-data-redis`
-# resolves inside cluster-a to a server that only cluster-a can reach, and inside
-# cluster-b to a different one. The name is shared; the data is not.
+# No per-region overrides by design: every cluster gets an identical release, and
+# `regional-data-redis` resolves inside each cluster to that cluster's own server.
+# The name is shared; the data is not.
 #
-# Postgres used to live here too. It is Cloud SQL now — one instance per region,
-# created by org-infra (`data.cloud_sql.instances.regional-*`) and reached as
-# `regional-postgres.internal`, a name that resolves only inside that region's
-# own VPC. The tier is still regional; it just no longer runs in the cluster.
-#
-# Redis stayed behind on purpose rather than by omission: it is a cache, so one
-# instance per cluster is the correct shape, not a stand-in for a managed
-# service. Memorystore would buy persistence and failover this demo does not need.
+# Redis stayed in-cluster on purpose — it is a cache, so one instance per cluster
+# is the right shape. Postgres moved to Cloud SQL (org-infra
+# `data.cloud_sql.instances.regional-*`, reached as `regional-postgres.internal`).
 #
 # SCOPE: review/demo — single replica, no replication, no backups, no failover.
 
@@ -24,8 +18,7 @@ redis:
   port: 6379
   storage:
     size: 1Gi
-    # Unset means the cluster's default StorageClass, which on GKE is
-    # standard-rwo. Pin it here if a specific class is required.
+    # Unset means the cluster's default StorageClass (standard-rwo on GKE).
     className: ""
   resources:
     requests:

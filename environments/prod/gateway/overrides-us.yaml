@@ -1,6 +1,4 @@
-# US (us-central1) — applied to any prod cluster labelled region=us.
-#
-# See overrides-in.yaml; `api-us` is the same arrangement in the other region,
-# published as api-us.pynd.dev.
+# US (us-central1) — prod clusters labelled region=us.
+# See overrides-in.yaml; `api-us` is the same arrangement in the other region.
 gateway:
   addressName: api-us

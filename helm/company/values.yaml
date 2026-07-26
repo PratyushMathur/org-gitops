@@ -1,8 +1,7 @@
 # company — the global service.
 #
 # Only the differences from the org defaults are listed; everything else comes
-# from helm/base. What changes per region (REGION, CLUSTER, the regional
-# hostname, the rollout steps) lives in
+# from helm/base. What changes per region lives in
 # environments/prod/company/overrides-<region>.yaml.
 
 component: api
@@ -10,24 +9,16 @@ partOf: demo
 
 image:
   repository: us-docker.pkg.dev/fynd-project-trial/apps/company
-  # Quoted, or YAML reads 1.0 as a float and renders ":1". The base chart also
-  # passes this to the app as VERSION.
-  #
-  # 1.0.1 drops Mongo: the service is Postgres-only now that the global tier is
-  # Cloud SQL. It is a new tag rather than a rebuilt 1.0.0 because pullPolicy is
-  # IfNotPresent — nodes that already cached 1.0.0 would keep serving the old
-  # image, which crashes on the missing GLOBAL_MONGO_URL.
+  # Quoted, or YAML reads 1.0 as a float and renders ":1". Overridden per region
+  # by CI, so this is only the fallback for an unlabelled cluster.
   tag: "1.0.2"
 
-# The image runs as uid 65532. The kubelet can't check a user given by name
-# against runAsNonRoot, so the number is pinned here.
+# The kubelet cannot check a username against runAsNonRoot, so the uid is pinned.
 podSecurityContext:
   runAsUser: 65532
   runAsGroup: 65532
 
-# Flask writes .pyc files unless told not to, so the read-only root filesystem
-# the base chart sets by default is turned off here. Simpler than fighting it
-# for a demo.
+# Flask writes .pyc files, so the base chart's read-only root is turned off.
 securityContext:
   readOnlyRootFilesystem: false
 
@@ -37,29 +28,24 @@ env:
       fieldRef:
         fieldPath: metadata.name
 
-# Database URLs contain passwords, so they come from a Secret (created below).
 envFrom:
   - secretRef:
       name: company-db
 
 config: {}
-  # REGION and CLUSTER come from the per-region files.
-  # VERSION and TRACK are added by the base chart.
 
-# DEMO PASSWORD in git. Fine for a review environment, not for a real one — in
-# production set `extraObjects: []` and let External Secrets create a Secret of
-# the same name instead.
+# DEMO PASSWORD in git. Fine for a review environment; in production set
+# `extraObjects: []` and let External Secrets create a Secret of the same name.
 #
-# `global-postgres.internal` is the shared Cloud SQL instance org-infra creates
-# in `data.cloud_sql.instances.global` — one server, us-central1. The name
-# resolves in every VPC through the split-horizon `internal.` zone, and each
-# zone answers with that VPC's own Private Service Connect endpoint for the same
-# instance. Different IP per region, same database: that is what makes this tier
-# global, and why plain VPC peering (non-transitive) could not do it.
+# `global-postgres.internal` is the shared Cloud SQL instance (org-infra
+# `data.cloud_sql.instances.global`) — one server in us-central1. The name
+# resolves in every VPC through the split-horizon `internal.` zone, each
+# answering with its own Private Service Connect endpoint for the same instance.
+# Different IP per region, same database: that is what makes this tier global.
 #
-# There is no in-cluster stand-in behind this any more. If the pods will not go
-# Ready, check that org-infra's `data.cloud_sql.enabled` is true and applied —
-# /readyz opens a real connection, so an unresolvable name means no backend.
+# There is no in-cluster stand-in. If pods will not go Ready, check that
+# org-infra's `data.cloud_sql.enabled` is true and applied — /readyz opens a real
+# connection, so an unresolvable name means no backend.
 extraObjects:
   - apiVersion: v1
     kind: Secret
@@ -69,18 +55,16 @@ extraObjects:
     stringData:
       GLOBAL_POSTGRES_URL: "postgresql://app:demo@global-postgres.internal:5432/company"
 
-# /healthz doesn't touch the database, so a database outage won't get every pod
-# restarted. /readyz does, so an affected pod leaves the Service instead.
+# /healthz does not touch the database, so an outage will not restart every pod.
+# /readyz does, so an affected pod leaves the Service instead.
 livenessProbe:
   httpGet: { path: /healthz, port: http }
   periodSeconds: 20
 
-# /readyz opens a fresh connection to the global Postgres, which is in
-# us-central1 while this pod may be in asia-south1: TCP + TLS + auth across that
-# RTT measures ~2.6s. Kubernetes defaults timeoutSeconds to 1, so the probe
-# timed out forever and the pod never went Ready even though the app was healthy
-# and answering 200. This is the cost of a genuinely global tier — the regional
-# services reach an in-region instance and do not need it.
+# timeoutSeconds is raised from the default 1: /readyz opens a fresh connection to
+# Postgres in us-central1 from a pod that may be in asia-south1, and TCP + TLS +
+# auth across that RTT measures ~2.6s. At the default the probe always timed out
+# and the pod never went Ready despite answering 200.
 readinessProbe:
   httpGet: { path: /readyz, port: http }
   periodSeconds: 10
@@ -92,13 +76,9 @@ resources:
 
 replicaCount: 2
 
-# Fronted by the cluster's shared Gateway (helm/gateway), not by an Ingress
-# controller — the prod clusters run neither ingress-nginx nor cert-manager.
-#
-# The hostname is the cluster's, not the app's: both regions expose exactly one
-# name (api-ind / api-us), so apps are told apart by path. This one owns
-# /companies. /healthz, /readyz and /version stay in-cluster and are deliberately
-# not routed from outside.
+# Fronted by the cluster's shared Gateway (helm/gateway), not an Ingress
+# controller. Both regions expose one hostname, so apps are told apart by path:
+# this one owns /companies. /healthz, /readyz and /version stay in-cluster.
 httpRoute:
   enabled: true
   parentRefs:
@@ -110,14 +90,10 @@ httpRoute:
       pathType: PathPrefix
       servicePort: http
 
-# Progressive delivery through Argo Rollouts. The workload is a Rollout, not a
-# Deployment, and the canary is whatever `image.tag` becomes next — there is no
-# second tag pinned here the way the old self-managed canary needed. Changing
-# the tag above and syncing is what starts a rollout.
-#
-# India leads: 20% first, then 50%, pausing at each until a human runs
+# The canary is whatever image.tag becomes next; changing it and syncing starts a
+# rollout. India leads at 20% then 50%, pausing at each until a human runs
 #   kubectl argo rollouts promote company -n demo
-# The US is held further back — see environments/prod/company/overrides-us.yaml.
+# The US is held further back — see overrides-us.yaml.
 rollout:
   enabled: true
   steps:
@@ -125,9 +101,3 @@ rollout:
     - pause: {}
     - setWeight: 50
     - pause: {}
-
-# The older self-managed canary — a second Deployment on a second tag, with the
-# split written into the HTTPRoute by hand. Mutually exclusive with `rollout`,
-# and base.rollout fails the render if both are on.
-canary:
-  enabled: false

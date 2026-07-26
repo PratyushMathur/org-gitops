@@ -9,24 +9,23 @@ spec:
   sourceRepos:
     - https://github.com/PratyushMathur/org-gitops.git
 
-  # Matched by cluster name, because that is what the ApplicationSet puts in
-  # destination.name. The label env=prod is how clusters are *discovered*; this
-  # list is what they are *authorised* for. Adding a prod cluster is therefore
-  # deliberately two steps: label the cluster Secret, then add it here.
-  # Replace the list with a single `- name: "*"` if you would rather the label
-  # alone be sufficient.
+  # Matched by cluster name, which is what the ApplicationSet puts in
+  # destination.name. env=prod is how clusters are discovered; this list is what
+  # they are authorised for, so adding a prod cluster is deliberately two steps.
+  # Replace with a single `- name: "*"` to let the label alone suffice.
   destinations:
     - name: cluster-a
       namespace: "*"
     - name: cluster-b
       namespace: "*"
-    # The Argo CD control plane's own cluster. It is currently labelled env=prod,
-    # so the apps-prod ApplicationSet targets it; without this entry the generated
-    # Application is refused with a "not permitted in project" error. Drop it once
-    # the real workload clusters are registered under their own names.
+    # The Argo CD control plane's own cluster, currently labelled env=prod. Without
+    # this entry its generated Applications are refused as "not permitted in
+    # project". Drop it once the workload clusters are registered by name.
     - name: in-cluster
       namespace: "*"
 
+  # Namespace is the only cluster-scoped kind allowed, so an app chart cannot grant
+  # itself cluster RBAC or install a CRD. See platform-prod.yaml.
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
@@ -38,5 +37,5 @@ spec:
   orphanedResources:
     warn: true
 
-  # Attach an RBAC role here (or bind the project in argocd-rbac-cm) to gate who
-  # can run a prod sync. Left off deliberately - it needs your real group names.
+  # No RBAC role attached: it needs real group names. Add one here (or bind the
+  # project in argocd-rbac-cm) to gate who can run a prod sync.

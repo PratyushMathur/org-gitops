@@ -1,14 +1,12 @@
-# Registers the Argo Rollouts controller in prod.
-#
-# argoProject is platform-prod, NOT apps-prod: this chart installs CRDs and
-# cluster RBAC, and apps-prod's clusterResourceWhitelist deliberately allows
-# only Namespace so an application chart can never do that. See
-# argocd/projects/platform-prod.yaml.
-#
-# Its own namespace rather than `demo` — it is a controller for the whole
-# cluster, not part of the demo workload.
+# Registers the Argo Rollouts controller in prod, in its own namespace — it is a
+# cluster controller, not part of the demo workload.
 app: argo-rollouts
 env: prod
 chartPath: helm/argo-rollouts
 namespace: argo-rollouts
+# platform-prod, not apps-prod: this chart installs CRDs and cluster RBAC, which
+# apps-prod's clusterResourceWhitelist deliberately forbids.
 argoProject: platform-prod
+# Synced by hand: it owns the CRDs and controller every Rollout depends on, so it
+# must never update itself out from under a rollout in flight.
+autoSync: false

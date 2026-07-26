@@ -1,13 +1,12 @@
-# Consumed by the apps-prod ApplicationSet git files generator.
+# Registers the regional Redis in prod. Each cluster gets its own identical,
+# independent instance, so there are no per-region overrides by design.
 #
-# Deployed to every cluster labelled env=prod, with no per-region overrides at
-# all: each cluster gets its own identical, independent Redis. The absence of an
-# overrides-<region>.yaml here is the design, not an omission.
-#
-# The employee service resolves this by Service name, so the release must be named
-# `regional-data` — the ApplicationSet sets releaseName from `app` below.
+# employee resolves this by Service name, so the release must be named
+# `regional-data` — the ApplicationSet takes releaseName from `app`.
 app: regional-data
 env: prod
 chartPath: helm/regional-data
 namespace: demo
 argoProject: apps-prod
+# Synced by hand: unattended syncs of a StatefulSet are not worth the surprise.
+autoSync: false

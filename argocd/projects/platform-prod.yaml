@@ -11,8 +11,7 @@ spec:
   sourceRepos:
     - https://github.com/PratyushMathur/org-gitops.git
 
-  # Same list as apps-prod. See argocd/projects/apps-prod.yaml for why the label
-  # discovers a cluster and this list authorises it.
+  # Same list as apps-prod.
   destinations:
     - name: cluster-a
       namespace: "*"
@@ -21,10 +20,9 @@ spec:
     - name: in-cluster
       namespace: "*"
 
-  # This is the whole reason platform-prod exists. apps-prod allows exactly one
-  # cluster-scoped kind (Namespace), so an app chart cannot quietly grant itself
-  # cluster RBAC or install a CRD. A controller has to do both, so it gets its
-  # own project rather than widening the one every application runs under.
+  # The reason this project exists: a controller needs to install CRDs and cluster
+  # RBAC, which apps-prod forbids. It gets its own project rather than widening the
+  # one every application runs under.
   clusterResourceWhitelist:
     - group: apiextensions.k8s.io
       kind: CustomResourceDefinition

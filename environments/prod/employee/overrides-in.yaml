@@ -1,30 +1,23 @@
-# India (asia-south1) — applied to any prod cluster labelled region=in.
+# India (asia-south1) — prod clusters labelled region=in.
+# Layered over helm/employee/values.yaml. Helm replaces lists, so hostnames are
+# written out in full; maps like config merge.
 #
-# Layered on top of helm/employee/values.yaml. Helm replaces lists, so
-# httpRoute.hostnames is written out in full. Maps like config merge.
-#
-# Note what isn't here: the regional Postgres and Redis URLs. They're the same
-# Service names in every region and resolve to a different server in each, so
-# the regional database needs no per-region configuration at all.
+# The regional Postgres and Redis URLs are deliberately absent: the Service names
+# are identical in every region and resolve to that region's own server.
 
 config:
   REGION: asia-south1
   CLUSTER: cluster-a
 
-# Same hostnames as company in this region — the two are separated by path
-# (/employees vs /companies) on the one Gateway, not by name. Both names have to
-# be listed here as well for that to hold: an HTTPRoute only answers for the
-# hostnames it names itself, so a name company serves and employee omits would
-# resolve, reach the Gateway, and 404 on /employees alone.
-#
-# See company/overrides-in.yaml for why the sslip.io name exists.
+# Must list the same hostnames as company: an HTTPRoute only answers for the
+# hostnames it names, so a name company serves and employee omits would resolve,
+# reach the Gateway and 404 on /employees. See company/overrides-in.yaml for why
+# the sslip.io name exists.
 httpRoute:
   hostnames:
     - api-ind.pynd.dev
     - api-ind.34.93.125.151.sslip.io
 
-# The image this region runs, written by org-apps CI on every push to main. See
-# company/overrides-in.yaml for why the tag is a commit sha, why both regions
-# carry this key, and what overwrites it.
+# Written by org-apps CI on every push to main (short commit sha).
 image:
   tag: "8ae0ec5"
