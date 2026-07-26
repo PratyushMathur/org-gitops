@@ -37,8 +37,7 @@ envFrom:
   - secretRef:
       name: company-db
 
-config:
-  GLOBAL_MONGO_DATABASE: company
+config: {}
   # REGION and CLUSTER come from the per-region files.
   # VERSION and TRACK are added by the base chart.
 
@@ -46,9 +45,16 @@ config:
 # production set `extraObjects: []` and let External Secrets create a Secret of
 # the same name instead.
 #
-# Both hostnames resolve through the private DNS zone `internal.`, which is
-# attached to the hub and to every spoke VPC, so they point at the same hub VM
-# from either region. That is what makes this tier global.
+# `global-postgres.internal` is the shared Cloud SQL instance org-infra creates
+# in `data.cloud_sql.instances.global` — one server, us-central1. The name
+# resolves in every VPC through the split-horizon `internal.` zone, and each
+# zone answers with that VPC's own Private Service Connect endpoint for the same
+# instance. Different IP per region, same database: that is what makes this tier
+# global, and why plain VPC peering (non-transitive) could not do it.
+#
+# There is no in-cluster stand-in behind this any more. If the pods will not go
+# Ready, check that org-infra's `data.cloud_sql.enabled` is true and applied —
+# /readyz opens a real connection, so an unresolvable name means no backend.
 extraObjects:
   - apiVersion: v1
     kind: Secret
@@ -57,7 +63,6 @@ extraObjects:
     type: Opaque
     stringData:
       GLOBAL_POSTGRES_URL: "postgresql://app:demo@global-postgres.internal:5432/company"
-      GLOBAL_MONGO_URL: "mongodb://global-mongo.internal:27017"
 
 # /healthz doesn't touch the database, so a database outage won't get every pod
 # restarted. /readyz does, so an affected pod leaves the Service instead.
@@ -93,11 +98,13 @@ httpRoute:
       pathType: PathPrefix
       servicePort: http
 
-# A second version behind a weighted ingress split: 20% of requests get 2.0.0.
-# Both report which they are on /version and in the X-Track header, so the split
-# is visible from outside. `curl -H "X-Canary: always"` always hits the canary.
+# Canary off: a single stable version, so the request path can be established
+# before a weighted split is layered on it. Turning this back on needs a 2.0.0
+# image in Artifact Registry — only 1.0.0 is pushed today, which is why the
+# canary pods sat in ImagePullBackOff. The HTTPRoute renders the weighted
+# backendRefs automatically once this is true again.
 canary:
-  enabled: true
+  enabled: false
   weight: 20
   image:
     tag: "2.0.0"

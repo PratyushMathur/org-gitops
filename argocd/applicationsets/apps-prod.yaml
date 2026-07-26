@@ -1,5 +1,5 @@
-# Production is a separate ApplicationSet rather than another generator on the
-# staging one. That keeps the sync policy differences explicit instead of hidden
+# Production gets its own ApplicationSet rather than sharing one with other
+# environments. That keeps the sync policy differences explicit instead of hidden
 # in template overrides, and means prod rollouts can be paused or rolled back by
 # touching a single object.
 apiVersion: argoproj.io/v1alpha1
@@ -36,7 +36,7 @@ spec:
 
   template:
     metadata:
-      # Unique per cluster: canary-app-prod-cluster-a, canary-app-prod-cluster-b
+      # Unique per cluster: company-prod-cluster-a, company-prod-cluster-b
       name: "{{.app}}-{{.env}}-{{.nameNormalized}}"
       labels:
         app.kubernetes.io/name: "{{.app}}"

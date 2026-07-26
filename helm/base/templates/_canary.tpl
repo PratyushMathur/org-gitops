@@ -95,6 +95,16 @@ the canary's VERSION are carried.
 {{- $docs := list (include "base.configmap" $ctx) (include "base.deployment" $ctx) (include "base.service" $ctx) -}}
 
 {{/*
+The canary Service needs its own HealthCheckPolicy. Policies are per-Service, so
+without this one the canary is health-checked on `/`, its NEG never reports a
+healthy endpoint, and it receives none of the traffic the weight promises it.
+*/}}
+{{- if and $v.httpRoute.enabled $v.healthCheck.enabled -}}
+{{- $docs = append $docs (include "base.healthcheckpolicy.for" (dict
+      "ctx" $ctx "name" (printf "%s-canary" (include "base.fullname" .)))) -}}
+{{- end -}}
+
+{{/*
 The canary Ingress duplicates the stable host rules with the canary annotations
 attached. ingress-nginx requires both Ingresses to cover the same host/path for
 the split to apply.

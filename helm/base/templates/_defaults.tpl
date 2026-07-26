@@ -133,6 +133,20 @@ httpRoute:
   # header mutation, anything `paths` does not express.
   extraRules: []
 
+# What the load balancer probes. Rendered only alongside `httpRoute`, and on by
+# default there because GKE's fallback is to health-check `/` — which stalls the
+# rollout of any app that does not serve it. See _healthcheckpolicy.tpl.
+healthCheck:
+  enabled: true
+  # Empty means "the readiness probe's path", falling back to the liveness
+  # probe's and then `/`. Set explicitly to override.
+  requestPath: ""
+  # Unset means GCP's defaults.
+  checkIntervalSec: ""
+  timeoutSec: ""
+  healthyThreshold: ""
+  unhealthyThreshold: ""
+
 # The Gateway itself. Off for application charts: it is per-cluster
 # infrastructure rendered by exactly one release (helm/gateway), never by each
 # app. Not part of `base.all` — include `base.gateway` explicitly.

@@ -8,15 +8,14 @@ Application Helm charts and Argo CD applications for the org.
 helm/
 ├── base/                     # library chart — shared templates + org defaults
 ├── gateway/                  # the cluster's shared Gateway (one per cluster)
-├── company/                  # global service (global Postgres + Mongo)
-├── employee/                 # regional service (regional Postgres + Redis)
-├── regional-data/            # per-region Postgres + Redis (no base dependency)
-└── canary-app/               # application chart, depends on base
+├── company/                  # global service (global Cloud SQL Postgres)
+├── employee/                 # regional service (regional Cloud SQL Postgres + Redis)
+└── regional-data/            # per-region Redis (no base dependency)
 
 argocd/
 ├── bootstrap/root-app.yaml   # applied by hand once; manages the rest
-├── projects/                 # AppProjects (staging, prod)
-└── applicationsets/          # ApplicationSets (staging, prod)
+├── projects/                 # AppProject (prod)
+└── applicationsets/          # ApplicationSet (prod)
 
 environments/
 └── <env>/<app>/
@@ -46,9 +45,9 @@ paths:
 
 | Chart | Tier | Databases | Canary |
 | --- | --- | --- | --- |
-| `company` | global | global Postgres + global Mongo, on the hub VM | 20% in, 5% us |
-| `employee` | regional | regional Postgres + regional Redis, in-cluster | 50% both |
-| `regional-data` | — | the regional Postgres and Redis themselves | — |
+| `company` | global | one global Cloud SQL Postgres, shared by both regions | 20% in, 5% us |
+| `employee` | regional | that region's Cloud SQL Postgres + in-cluster Redis | 50% both |
+| `regional-data` | — | the per-region Redis itself | — |
 
 Companies are global, so both regions read the same list. Employees are
 regional, so each region has its own. Adding an employee also looks the company
@@ -68,12 +67,27 @@ behind a single reserved IP, so the two services are separated by path prefix
 (`/companies`, `/employees`). `http`, not `https`, until `pynd.dev` is delegated
 and Certificate Manager can validate it — see [`helm/gateway`](helm/gateway/values.yaml).
 
-`regional-data` deliberately has **no** per-region overrides: every cluster gets
-an identical release, so `regional-data-postgres` resolves to a different server
-in each region. The shared name with unshared data is the point. It is a
-review-grade data tier — single replica, no backups — and in production would be
-replaced by per-region Cloud SQL and Memorystore created in `org-infra`, not
-hardened in place.
+Both Postgres tiers are managed instances created in
+[`org-infra`](../org-infra/configs/prod/cluster-a/config.yaml) under
+`data.cloud_sql`, never containers in the cluster. The charts address them by
+name through the split-horizon `internal.` DNS zone:
+
+| Name | Resolves to |
+| --- | --- |
+| `global-postgres.internal` | one us-central1 instance, from **every** VPC — a different PSC endpoint IP per region, the same database |
+| `regional-postgres.internal` | that VPC's **own** regional instance, and it does not resolve anywhere else |
+
+Same trick, opposite intent: one name that is deliberately shared, one name that
+is deliberately not. Peering alone could not deliver the global case — it is
+non-transitive, so a spoke can never reach a hub instance through the hub's
+other peering — which is why each VPC gets its own Private Service Connect
+endpoint instead.
+
+`regional-data` is what is left in the cluster: a Redis per region, with
+deliberately **no** per-region overrides, so `regional-data-redis` resolves to a
+different server in each. It is a cache, so one per cluster is the right shape
+rather than a stand-in for Memorystore. It stays review-grade — single replica,
+no backups.
 
 The regional and global tiers are told apart in every response by a `scope`
 field, and the identity in it is reported by the *server*, not echoed from
@@ -115,9 +129,8 @@ gitignored; `Chart.lock` is committed.
 
 ## Argo CD
 
-Two environments, **staging** and **prod**, each with its own ApplicationSet:
-staging auto-syncs, prod is manual. Each is a **matrix** of a cluster generator
-and a git files generator:
+One environment, **prod**, with its own ApplicationSet and a manual sync policy.
+It is a **matrix** of a cluster generator and a git files generator:
 
 ```
 clusters(env=<env>)  ×  git files(environments/<env>/*/config.yaml)
@@ -125,9 +138,9 @@ clusters(env=<env>)  ×  git files(environments/<env>/*/config.yaml)
 
 Clusters are identified by the `env` label on their Argo CD cluster Secret, so
 prod fans out across **cluster-a** and **cluster-b** automatically — one
-Application per app per cluster, named `<app>-<env>-<cluster>`. Deploying an
-existing chart to another environment is one new directory; deploying a new app
-is a chart plus one directory per environment. Neither touches `argocd/`.
+Application per app per cluster, named `<app>-<env>-<cluster>`. Deploying a new
+app is a chart plus one directory under `environments/prod/`; it does not touch
+`argocd/`.
 
 Bootstrap on a cluster that already runs Argo CD:
 
@@ -135,40 +148,37 @@ Bootstrap on a cluster that already runs Argo CD:
 kubectl apply -f argocd/bootstrap/root-app.yaml
 ```
 
-See [`argocd/README.md`](argocd/README.md) for the values layering, the
-staging/prod policy split, and the placeholders that need replacing before a
-first sync.
+See [`argocd/README.md`](argocd/README.md) for the values layering, the prod
+sync policy, and the placeholders that need replacing before a first sync.
 
-### Deploying an app to an environment
+### Deploying an app
 
 ```bash
-mkdir -p environments/staging/my-app
+mkdir -p environments/prod/my-app
 ```
 
 `config.yaml`:
 
 ```yaml
 app: my-app
-env: staging
+env: prod
 chartPath: helm/my-app
-namespace: my-app-staging
-argoProject: apps-staging
+namespace: demo
+argoProject: apps-prod
 ```
 
 No cluster is named — the ApplicationSet fans the app out to every cluster
 labelled for that environment.
 
 That is the whole registration — there is no per-environment values file. All
-values live in the chart's `values.yaml`, so the app deploys the same
-configuration in every environment; only the namespace differs. Optionally add
-`overrides-<region>.yaml` for settings that differ between regions within an
-environment, selected by the cluster's `region` label. Namespaces must match a pattern allowed by the AppProject's
-`destinations`. Introducing a third environment means a new AppProject and
+values live in the chart's `values.yaml`. Optionally add `overrides-<region>.yaml`
+for settings that differ between regions, selected by the cluster's `region`
+label. Namespaces must match a pattern allowed by the AppProject's
+`destinations`. Adding a second environment means a new AppProject and
 ApplicationSet pair under `argocd/`.
 
 Preview exactly what Argo CD will apply:
 
 ```bash
-helm template my-app helm/my-app \
-  --namespace my-app-staging
+helm template my-app helm/my-app --namespace demo
 ```

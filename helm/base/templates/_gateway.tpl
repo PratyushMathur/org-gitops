@@ -42,12 +42,25 @@ metadata:
 spec:
   gatewayClassName: {{ required "gateway.className is required" $v.gateway.className }}
   {{- /*
-  A named address, not a literal one. The name is stable across Gateway
-  recreation; the IP behind it is Terraform's to allocate and DNS's to publish.
+  A named address, not a literal one: the name is stable across Gateway
+  recreation, while the IP behind it is Terraform's to allocate and DNS's to
+  publish. Omit both and GKE allocates an ephemeral IP, which programs happily
+  and quietly does not match the A record — so this is worth getting right.
+
+  `NamedAddress` is bare, with no domain prefix. Gateway API reserves prefixed
+  types for implementation extensions, so `networking.gke.io/NamedAddress` looks
+  like the more correct spelling, but the GKE controller rejects it:
+
+    Error GWCER106: Gateway is invalid, err: unsupported address type
+    "networking.gke.io/NamedAddress".
+
+  That failure is asynchronous — admission accepts the object and the listener
+  only later reports UnsupportedAddress, so a wrong type here surfaces as a
+  Gateway that never programs, not as a rejected apply.
   */ -}}
   {{- if $v.gateway.addressName }}
   addresses:
-    - type: networking.gke.io/NamedAddress
+    - type: NamedAddress
       value: {{ $v.gateway.addressName | quote }}
   {{- else if $v.gateway.addressIP }}
   addresses:

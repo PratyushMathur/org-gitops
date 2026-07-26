@@ -5,14 +5,13 @@ argocd/
 ├── bootstrap/
 │   └── root-app.yaml            # the only object applied by hand
 ├── projects/
-│   ├── apps-staging.yaml        # AppProject: *-staging
 │   └── apps-prod.yaml           # AppProject: *-prod
 └── applicationsets/
-    ├── apps-staging.yaml        # auto-sync
     └── apps-prod.yaml           # manual sync
 ```
 
-Two environments: **staging** and **prod**.
+One environment, **prod**. A second one is an AppProject + ApplicationSet pair
+here plus a directory under `environments/`; nothing else changes.
 
 ## How an app gets deployed
 
@@ -31,11 +30,11 @@ giving one Application per app **per cluster**, named
 it says what runs, not where:
 
 ```yaml
-app: canary-app
-env: staging
-chartPath: helm/canary-app
-namespace: canary-staging
-argoProject: apps-staging
+app: company
+env: prod
+chartPath: helm/company
+namespace: demo
+argoProject: apps-prod
 ```
 
 The AppProject key is `argoProject`, not `project`, because the cluster
@@ -54,7 +53,6 @@ a hardcoded API URL:
 ```bash
 argocd cluster add <kube-context> --name cluster-a --label env=prod --label region=in
 argocd cluster add <kube-context> --name cluster-b --label env=prod --label region=us
-argocd cluster add <kube-context> --name cluster-s --label env=staging
 ```
 
 Prod currently spans **cluster-a** and **cluster-b**; every app registered under
@@ -66,8 +64,7 @@ two steps, on purpose:
    now *authorised*
 
 Discovery and authorisation are separated so a mislabelled cluster cannot
-silently start receiving production workloads. Staging skips step 2: its
-AppProject allows `name: "*"` within `*-staging` namespaces.
+silently start receiving production workloads.
 
 The Application's `destination.name` is the cluster name from the generator, so
 the AppProject `destinations` match on `name` rather than `server`.
@@ -82,18 +79,20 @@ Three layers, lowest to highest:
    **optional** (`ignoreMissingValueFiles: true`)
 
 There is deliberately **no per-environment layer**. `helm/<app>/values.yaml` is
-the single source of values, and it holds production values, so every
-environment deploys the same configuration. The only thing that varies by
-environment is the namespace, which comes from `config.yaml`.
+the single source of values, so every environment would deploy the same
+configuration; the only thing that varies by environment is the namespace, which
+comes from `config.yaml`.
 
-That means **staging is not a lower-scale rehearsal of prod — it is prod's
-configuration in a different namespace**: same autoscaling floor, same resource
-requests, same ingress host and TLS secret. If you later need staging to differ,
-reintroduce a layer between 2 and 3 rather than special-casing the chart.
+That is a deliberate constraint on any environment added later: it would be
+prod's configuration in a different namespace, not a lower-scale rehearsal —
+same autoscaling floor, same resource requests. If one genuinely needs to
+differ, reintroduce a layer between 2 and 3 rather than special-casing the
+chart.
 
 Layer 3 exists for the cases where two prod clusters genuinely differ. For
-`canary-app` that is the regional ingress hostname and the `CLUSTER`/`REGION`
-config values — see `environments/prod/canary-app/overrides-{in,us}.yaml`.
+`company` and `employee` that is the regional hostname on the HTTPRoute and the
+`CLUSTER`/`REGION` config values — see
+`environments/prod/company/overrides-{in,us}.yaml`.
 Keep it to what actually differs; anything shared belongs in layer 2 where it
 cannot drift between clusters.
 
@@ -104,7 +103,7 @@ layer-3 file at all — every cluster gets an identical release, and the data is
 separate because the clusters are.
 
 Helm **replaces** lists rather than merging them, so a per-cluster file that
-touches `ingress.hosts` must restate the whole list, including the shared
+touches `httpRoute.hostnames` must restate the whole list, including the shared
 entries. Maps (like `config`) do merge.
 
 Note that layer 2 applies to *each* cluster: `autoscaling.minReplicas: 3` means a
@@ -118,45 +117,45 @@ CD's supported way to reference a file outside the chart path.
 Reproduce what a given cluster will get:
 
 ```bash
-# every cluster with no per-cluster file, including all of staging
-helm template canary-app helm/canary-app --namespace canary-prod
+# every cluster with no per-cluster file
+helm template company helm/company --namespace demo
 
 # exactly what a region=in cluster will receive
-helm template canary-app helm/canary-app \
-  -f environments/prod/canary-app/overrides-in.yaml \
-  --namespace canary-prod
+helm template company helm/company \
+  -f environments/prod/company/overrides-in.yaml \
+  --namespace demo
 
 # diff two prod clusters
-diff <(helm template canary-app helm/canary-app \
-        -f environments/prod/canary-app/overrides-in.yaml --namespace canary-prod) \
-     <(helm template canary-app helm/canary-app \
-        -f environments/prod/canary-app/overrides-us.yaml --namespace canary-prod)
+diff <(helm template company helm/company \
+        -f environments/prod/company/overrides-in.yaml --namespace demo) \
+     <(helm template company helm/company \
+        -f environments/prod/company/overrides-us.yaml --namespace demo)
 ```
 
-## Why two ApplicationSets
+## One ApplicationSet per environment
 
-Prod is a separate object rather than another generator on the staging set. The
-sync policy differences stay explicit instead of hidden in per-generator
+An environment gets its own object rather than another generator on a shared
+one. Sync policy differences stay explicit instead of hidden in per-generator
 template overrides, and prod rollouts can be paused or rolled back by touching
-one object.
+one object. What prod picks:
 
-| | staging | prod |
-| --- | --- | --- |
-| Cluster selector | `env=staging` | `env=prod` |
-| Project destinations | `name: "*"` | `cluster-a`, `cluster-b` |
-| Sync | automated, `prune` + `selfHeal` | manual (drift still reported) |
-| Application finalizer | yes — delete cascades | no — delete leaves workloads |
-| ApplicationSet deletion | removes Applications | `preserveResourcesOnDeletion: true` |
-| `revisionHistoryLimit` | 5 | 10 |
+| | prod |
+| --- | --- |
+| Cluster selector | `env=prod` |
+| Project destinations | `cluster-a`, `cluster-b` — named, not `*` |
+| Sync | manual (drift still reported) |
+| Application finalizer | no — deleting an Application leaves workloads |
+| ApplicationSet deletion | `preserveResourcesOnDeletion: true` |
+| `revisionHistoryLimit` | 10 |
 
 Manual prod sync is per-Application, and there is now one Application per
 cluster — so a release can be synced to cluster-a, verified, then synced to
 cluster-b. The fan-out does not force a simultaneous rollout.
 
-Both use `CreateNamespace=true`, `ServerSideApply=true`, and a capped retry
-backoff. `goTemplateOptions: ["missingkey=error"]` is set on both so a typo'd
-key in a `config.yaml` fails the generator instead of rendering an empty string
-into a namespace or project name.
+It uses `CreateNamespace=true`, `ServerSideApply=true`, and a capped retry
+backoff. `goTemplateOptions: ["missingkey=error"]` is set so a typo'd key in a
+`config.yaml` fails the generator instead of rendering an empty string into a
+namespace or project name.
 
 ## Bootstrap
 
@@ -175,25 +174,15 @@ deliberate act, not a side effect of moving a file.
 
 Repo-specific values are placeholders and need replacing:
 
-- `repoURL` is `https://github.com/PratyushMathur/org-gitops.git` in both
-  ApplicationSets and the root app. If the org repo lives elsewhere, update
-  those plus `sourceRepos` in both AppProjects.
-- **Clusters must be registered and labelled** (`env=prod` / `env=staging`)
-  before anything generates. An unlabelled cluster produces zero Applications,
-  silently — the matrix has nothing to multiply by. `argocd cluster list` is the
-  quickest check.
-- The staging cluster name is assumed, not known — nothing here hardcodes it,
-  but the `argocd cluster add` example uses `cluster-s`.
-- Both prod clusters serve the top-level `demo.pynd.dev` plus a regional
-  hostname — `in.demo.pynd.dev` on cluster-a, `us.demo.pynd.dev` on cluster-b —
-  which assumes active/active behind a global load balancer. If that is not the
-  topology, drop the shared host from the per-cluster files.
+- `repoURL` is `https://github.com/PratyushMathur/org-gitops.git` in the
+  ApplicationSet and the root app. If the org repo lives elsewhere, update those
+  plus `sourceRepos` in the AppProject.
+- **Clusters must be registered and labelled** (`env=prod`) before anything
+  generates. An unlabelled cluster produces zero Applications, silently — the
+  matrix has nothing to multiply by. `argocd cluster list` is the quickest check.
 - The per-region files are selected by the cluster Secret's `region` label, not
   by cluster name. A prod cluster with no `region` label silently gets only the
   chart's values — `ignoreMissingValueFiles: true` hides the miss.
-- Both prod clusters reference the same `canary-app-tls` secret name, but each
-  covers a different SAN list — they are separate certificates in separate
-  clusters, issued by cert-manager per cluster.
 - `apps-prod` has no `roles`. Bind it in `argocd-rbac-cm`, or add project roles,
   to gate who can trigger a prod sync — otherwise "manual sync" only means
   "manual", not "authorized".

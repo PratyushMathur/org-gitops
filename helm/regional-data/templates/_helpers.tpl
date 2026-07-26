@@ -3,8 +3,8 @@
 {{- end -}}
 
 {{/*
-Release-qualified name. The employee service addresses these by Service name, so
-the release must be called `regional-data` for `regional-data-postgres` to
+Release-qualified name. The employee service addresses this by Service name, so
+the release must be called `regional-data` for `regional-data-redis` to
 resolve — which is what the ApplicationSet does (releaseName is the app name
 from config.yaml).
 */}}

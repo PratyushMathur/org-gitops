@@ -37,10 +37,15 @@ config:
 
 # DEMO PASSWORD in git — see helm/company/values.yaml.
 #
-# These are plain in-cluster Service names pointing at the Postgres and Redis the
-# regional-data chart runs in this cluster. Nothing sends them over the VPC
-# peering, which is what makes this tier regional: the same name is a different
-# server in each region.
+# `regional-postgres.internal` is this region's own Cloud SQL instance
+# (org-infra `data.cloud_sql.instances.regional-*`). The name exists only in the
+# spoke's own `internal.` zone and answers with a PSC endpoint in that same VPC,
+# so it is a different server in each region — which is exactly what makes this
+# tier regional. Contrast global-postgres.internal, which every zone answers
+# with a route to the one shared instance.
+#
+# Redis stays an in-cluster Service name: it is a per-region cache, so one per
+# cluster is the right shape rather than a stand-in for something managed.
 extraObjects:
   - apiVersion: v1
     kind: Secret
@@ -48,7 +53,7 @@ extraObjects:
       name: employee-db
     type: Opaque
     stringData:
-      REGIONAL_POSTGRES_URL: "postgresql://app:demo@regional-data-postgres:5432/employee"
+      REGIONAL_POSTGRES_URL: "postgresql://app:demo@regional-postgres.internal:5432/employee"
       REGIONAL_REDIS_URL: "redis://regional-data-redis:6379/0"
 
 livenessProbe:
@@ -79,9 +84,10 @@ httpRoute:
       pathType: PathPrefix
       servicePort: http
 
-# A different weight from company's 20%, so it's clear the two are independent.
+# Canary off for now — see helm/company/values.yaml. Needs a 2.0.0 image, which
+# is not pushed; the weight is kept so re-enabling is a one-line change.
 canary:
-  enabled: true
+  enabled: false
   weight: 50
   image:
     tag: "2.0.0"

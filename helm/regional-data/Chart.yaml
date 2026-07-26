@@ -1,13 +1,14 @@
 apiVersion: v2
 name: regional-data
 description: >-
-  The per-region data tier: one Postgres and one Redis, running inside each
+  The in-cluster half of the per-region data tier: one Redis, running inside each
   cluster and shared by nothing outside it. Deployed to every prod cluster, so
-  the same Service names resolve to a different server in each region.
+  the same Service name resolves to a different server in each region. The
+  regional Postgres is Cloud SQL, created in org-infra.
 type: application
-version: 0.1.0
-appVersion: "16"
+version: 0.2.0
+appVersion: "7"
 
 # No dependency on helm/base: that library renders a Deployment and the standard
-# web-service object set, and these are stateful singletons with their own
-# shape. The base chart is for applications, not for datastores.
+# web-service object set, and this is a stateful singleton with its own shape.
+# The base chart is for applications, not for datastores.

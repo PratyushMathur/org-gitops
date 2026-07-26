@@ -20,6 +20,7 @@ directly instead if a chart needs finer control.
       (include "base.service" $ctx)
       (include "base.ingress" $ctx)
       (include "base.httproute" $ctx)
+      (include "base.healthcheckpolicy" $ctx)
       (include "base.hpa" $ctx)
       (include "base.pdb" $ctx) -}}
 {{- range $v.extraObjects }}

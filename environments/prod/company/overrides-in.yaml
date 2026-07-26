@@ -1,7 +1,7 @@
 # India (asia-south1) — applied to any prod cluster labelled region=in.
 #
 # Layered on top of helm/company/values.yaml. Helm replaces lists, so
-# ingress.hosts and ingress.tls are written out in full. Maps like config merge.
+# httpRoute.hostnames is written out in full. Maps like config merge.
 
 # What the service reports as its region, and what it stamps on every company
 # row it writes — which is how a company added here is still attributable when
