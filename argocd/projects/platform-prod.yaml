@@ -1,0 +1,47 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-prod
+  namespace: argocd
+spec:
+  description: >-
+    Cluster-scoped platform components in production — controllers and their
+    CRDs, not application workloads.
+
+  sourceRepos:
+    - https://github.com/PratyushMathur/org-gitops.git
+
+  # Same list as apps-prod. See argocd/projects/apps-prod.yaml for why the label
+  # discovers a cluster and this list authorises it.
+  destinations:
+    - name: cluster-a
+      namespace: "*"
+    - name: cluster-b
+      namespace: "*"
+    - name: in-cluster
+      namespace: "*"
+
+  # This is the whole reason platform-prod exists. apps-prod allows exactly one
+  # cluster-scoped kind (Namespace), so an app chart cannot quietly grant itself
+  # cluster RBAC or install a CRD. A controller has to do both, so it gets its
+  # own project rather than widening the one every application runs under.
+  clusterResourceWhitelist:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+    - group: ""
+      kind: Namespace
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  orphanedResources:
+    warn: true

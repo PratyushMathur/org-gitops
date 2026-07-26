@@ -2,7 +2,7 @@
 #
 # Only the differences from the org defaults are listed; everything else comes
 # from helm/base. What changes per region (REGION, CLUSTER, the regional
-# hostname, the canary weight) lives in
+# hostname, the rollout steps) lives in
 # environments/prod/company/overrides-<region>.yaml.
 
 component: api
@@ -110,13 +110,24 @@ httpRoute:
       pathType: PathPrefix
       servicePort: http
 
-# Canary off: a single stable version, so the request path can be established
-# before a weighted split is layered on it. Turning this back on needs a 2.0.0
-# image in Artifact Registry — only 1.0.0 is pushed today, which is why the
-# canary pods sat in ImagePullBackOff. The HTTPRoute renders the weighted
-# backendRefs automatically once this is true again.
+# Progressive delivery through Argo Rollouts. The workload is a Rollout, not a
+# Deployment, and the canary is whatever `image.tag` becomes next — there is no
+# second tag pinned here the way the old self-managed canary needed. Changing
+# the tag above and syncing is what starts a rollout.
+#
+# India leads: 20% first, then 50%, pausing at each until a human runs
+#   kubectl argo rollouts promote company -n demo
+# The US is held further back — see environments/prod/company/overrides-us.yaml.
+rollout:
+  enabled: true
+  steps:
+    - setWeight: 20
+    - pause: {}
+    - setWeight: 50
+    - pause: {}
+
+# The older self-managed canary — a second Deployment on a second tag, with the
+# split written into the HTTPRoute by hand. Mutually exclusive with `rollout`,
+# and base.rollout fails the render if both are on.
 canary:
   enabled: false
-  weight: 20
-  image:
-    tag: "2.0.0"

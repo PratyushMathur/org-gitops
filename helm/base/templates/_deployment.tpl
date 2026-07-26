@@ -1,5 +1,10 @@
 {{- define "base.deployment" -}}
 {{- $v := fromYaml (include "base.values" .) -}}
+{{/*
+No rollout guard here on purpose: base.rollout renders this template to lift the
+pod spec out of it, so a guard would make the Rollout render nothing. base.all
+picks between the two through base.workload.
+*/}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

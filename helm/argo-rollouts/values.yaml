@@ -1,0 +1,50 @@
+# argo-rollouts — the progressive-delivery controller.
+#
+# Everything here is passed through to the upstream chart under its own key.
+# This file holds only what differs from its defaults.
+
+argo-rollouts:
+  # The CRDs are the API the app charts render against, so the controller has to
+  # own them. keepCRDs means uninstalling the controller does not delete every
+  # Rollout object in the cluster along with it.
+  installCRDs: true
+  keepCRDs: true
+  clusterInstall: true
+
+  controller:
+    # The Gateway API traffic router. Argo Rollouts ships routers for Istio,
+    # SMI, ALB and nginx in-tree, but Gateway API support lives out-of-tree in
+    # argoproj-labs, so it is loaded as a plugin.
+    #
+    # The controller downloads this binary at startup and will not become ready
+    # if it cannot — the nodes need egress to github.com. The version is pinned:
+    # `latest` would mean a controller restart could silently change how traffic
+    # is shifted.
+    #
+    # The name is not free-form. It has to match the key the Rollout's
+    # trafficRouting.plugins map uses, which the plugin itself defines as
+    # `argoproj-labs/gatewayAPI` — see base.rollout in helm/base.
+    trafficRouterPlugins:
+      - name: "argoproj-labs/gatewayAPI"
+        location: "https://github.com/argoproj-labs/rollouts-plugin-trafficrouter-gatewayapi/releases/download/v0.16.0/gatewayapi-plugin-linux-amd64"
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+
+  # The rollout dashboard is a separate deployment and is off by default. Left
+  # off: `kubectl argo rollouts get rollout <name> --watch` covers the same
+  # ground without exposing another service.
+  dashboard:
+    enabled: false
+
+# The ServiceAccount the upstream subchart creates for the controller, which the
+# Gateway API plugin's ClusterRoleBinding attaches to. It follows the subchart's
+# fullname, which resolves to the release name here because the ApplicationSet
+# sets releaseName from `app` in environments/prod/argo-rollouts/config.yaml.
+# Restated rather than computed: a named value that is wrong fails loudly at
+# apply time, where a cross-chart template call would quietly bind to nothing.
+controllerServiceAccount: argo-rollouts

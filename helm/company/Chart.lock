@@ -1,6 +1,6 @@
 dependencies:
 - name: base
   repository: file://../base
-  version: 0.3.0
-digest: sha256:a350314028a2a4bc59d8b7fad345ac14f5b9c02570f7d7e7a53369368778b210
-generated: "2026-07-26T11:45:51.389245+05:30"
+  version: 0.4.0
+digest: sha256:cfbe5acf4f4327512c06ae68d35e85c7f445cb3286a2a4ec6c4de495e39b196b
+generated: "2026-07-26T14:57:04.223884+05:30"

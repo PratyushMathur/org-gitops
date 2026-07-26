@@ -1,0 +1,50 @@
+{{/*
+RBAC for the Gateway API traffic-router plugin.
+
+Shifting a canary's weight means rewriting `backendRefs[].weight` on the app's
+HTTPRoute, and the upstream chart's ClusterRole grants nothing under
+gateway.networking.k8s.io — it has no aggregationRule either, so there is no
+role to aggregate into. Without this the controller reconciles the Rollout,
+reports the step as taken, and the weights on the route never move.
+
+Bound to the subchart's ServiceAccount, so it is the controller itself that
+gains the permission, not the workloads.
+*/}}
+{{- $sa := .Values.controllerServiceAccount -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-gatewayapi
+  labels:
+    app.kubernetes.io/name: argo-rollouts
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: traffic-router-plugin
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+rules:
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes"]
+    # get/list/watch to read the current split, update/patch to move it.
+    verbs: ["get", "list", "watch", "update", "patch"]
+  # The plugin records progress in a ConfigMap next to the controller so a
+  # restart mid-rollout does not lose the weights it had already applied.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-gatewayapi
+  labels:
+    app.kubernetes.io/name: argo-rollouts
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: traffic-router-plugin
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-gatewayapi
+subjects:
+  - kind: ServiceAccount
+    name: {{ $sa }}
+    namespace: {{ .Release.Namespace }}

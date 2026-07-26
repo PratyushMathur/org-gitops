@@ -184,6 +184,32 @@ autoscaling:
   behavior: {}
 
 # Canary track, rendered by `base.canary` (opt-in — see templates/_canary.tpl).
+# Progressive delivery through Argo Rollouts. When enabled, base.all renders a
+# Rollout instead of a Deployment and the controller owns the canary — see
+# base.rollout. Requires httpRoute.enabled and the argo-rollouts controller with
+# the Gateway API plugin (helm/argo-rollouts).
+#
+# This and `canary` below are mutually exclusive, and base.rollout fails the
+# render if both are on. `canary` is the older self-managed path: a second
+# Deployment and a weight edited by hand in git.
+rollout:
+  enabled: false
+  # Walked in order each time the pod template changes. `pause: {}` waits
+  # indefinitely, so a human runs `kubectl argo rollouts promote <name>` — the
+  # same posture as prod's manual Argo CD sync. Use `pause: {duration: 5m}` to
+  # promote on a timer instead.
+  steps:
+    - setWeight: 20
+    - pause: {}
+    - setWeight: 50
+    - pause: {}
+  # An AnalysisTemplate reference to gate the steps on metrics, e.g.
+  #   analysis:
+  #     templates:
+  #       - templateName: success-rate
+  # Empty means the steps are gated only by the pauses above.
+  analysis: {}
+
 # Keys other than enabled/weight/header/headerValue are deep-merged over the
 # stable values, so the canary inherits everything it does not restate.
 canary:

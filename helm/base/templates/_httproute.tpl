@@ -75,8 +75,19 @@ header-match rule that pins a request to the canary.
 {{- $fullName := include "base.fullname" $ctx -}}
 {{- $canaryName := printf "%s-canary" $fullName -}}
 {{- $canary := $v.canary | default dict -}}
+{{- $rollout := $v.rollout | default dict -}}
+{{/*
+On the Rollout path the split is not ours to describe. The route still has to
+carry BOTH backends from the start — the Gateway API plugin rewrites the weights
+of backends that are already there, it does not add them — so it is written as
+100/0 and the controller moves it from there. Treating this as `canary.enabled`
+with weight 0 keeps one code path for the rule shape.
+*/}}
+{{- if $rollout.enabled -}}
+{{- $canary = dict "enabled" true "weight" 0 "header" $canary.header "headerValue" $canary.headerValue -}}
+{{- end -}}
 {{- $weight := $canary.weight | default 0 | int -}}
-{{- if $canary.enabled -}}
+{{- if and $canary.enabled (not $rollout.enabled) -}}
 {{- if or (lt $weight 0) (gt $weight 100) -}}
 {{- fail (printf "canary.weight must be between 0 and 100, got %d" $weight) -}}
 {{- end -}}

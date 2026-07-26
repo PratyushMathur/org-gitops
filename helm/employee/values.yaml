@@ -84,10 +84,15 @@ httpRoute:
       pathType: PathPrefix
       servicePort: http
 
-# Canary off for now — see helm/company/values.yaml. Needs a 2.0.0 image, which
-# is not pushed; the weight is kept so re-enabling is a one-line change.
+# Progressive delivery through Argo Rollouts — see helm/company/values.yaml.
+# Coarser steps than company: employee is the regional service, so a bad release
+# is already contained to one region and there is less to learn from a 20% dwell.
+rollout:
+  enabled: true
+  steps:
+    - setWeight: 50
+    - pause: {}
+
+# The older self-managed canary. Mutually exclusive with `rollout`.
 canary:
   enabled: false
-  weight: 50
-  image:
-    tag: "2.0.0"

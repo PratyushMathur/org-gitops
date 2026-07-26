@@ -4,12 +4,16 @@ description: >-
   Org-wide base library chart. Provides the standard Deployment, Service,
   ServiceAccount, Ingress, HTTPRoute, Gateway, HPA, PDB and ConfigMap templates
   plus the opinionated defaults every application chart inherits, plus opt-in
-  canary releases.
+  canary releases — self-managed, or progressive through Argo Rollouts.
 type: library
-# 0.3.0 adds `base.httproute` and `base.gateway`, and teaches `base.canary` to
-# express its split as weighted HTTPRoute backendRefs. Additive — 0.2.0 charts
-# render unchanged, since httpRoute.enabled and gateway.enabled default to false.
-version: 0.3.0
+# 0.4.0 adds `base.rollout`: `rollout.enabled` swaps the Deployment for an Argo
+# Rollouts Rollout and hands the canary to that controller, which shifts weight
+# on the app's HTTPRoute through the Gateway API plugin. Additive — rollout
+# .enabled defaults to false, so 0.3.0 charts render unchanged.
+#
+# 0.3.0 added `base.httproute` and `base.gateway`, and taught `base.canary` to
+# express its split as weighted HTTPRoute backendRefs.
+version: 0.4.0
 keywords:
   - base
   - library

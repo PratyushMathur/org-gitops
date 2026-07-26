@@ -15,7 +15,17 @@ httpRoute:
     - api-us.pynd.dev
     - api-us.34.72.1.107.sslip.io
 
-# Same release, held further back here: India is at 20%, the US at 5%. Rolling a
-# canary out one region at a time is exactly why this file exists.
-canary:
-  weight: 5
+# Same release, walked more cautiously here. India opens at 20%; the US starts at
+# 5% and adds a step, so a regression has two chances to be caught before the
+# larger region carries half the traffic. Rolling a release out one region at a
+# time is exactly why this file exists.
+#
+# Helm replaces lists, so the whole step list is restated rather than patched.
+rollout:
+  steps:
+    - setWeight: 5
+    - pause: {}
+    - setWeight: 20
+    - pause: {}
+    - setWeight: 50
+    - pause: {}
