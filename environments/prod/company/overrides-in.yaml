@@ -58,4 +58,4 @@ httpRoute:
 # and is how you would roll this region back, but the next push to main
 # overwrites it.
 image:
-  tag: "1.0.2"
+  tag: "8ae0ec5"
