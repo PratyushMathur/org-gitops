@@ -75,9 +75,16 @@ livenessProbe:
   httpGet: { path: /healthz, port: http }
   periodSeconds: 20
 
+# /readyz opens a fresh connection to the global Postgres, which is in
+# us-central1 while this pod may be in asia-south1: TCP + TLS + auth across that
+# RTT measures ~2.6s. Kubernetes defaults timeoutSeconds to 1, so the probe
+# timed out forever and the pod never went Ready even though the app was healthy
+# and answering 200. This is the cost of a genuinely global tier — the regional
+# services reach an in-region instance and do not need it.
 readinessProbe:
   httpGet: { path: /readyz, port: http }
   periodSeconds: 10
+  timeoutSeconds: 5
 
 resources:
   requests: { cpu: 50m, memory: 128Mi }
