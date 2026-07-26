@@ -12,7 +12,12 @@ image:
   repository: us-docker.pkg.dev/fynd-project-trial/apps/company
   # Quoted, or YAML reads 1.0 as a float and renders ":1". The base chart also
   # passes this to the app as VERSION.
-  tag: "1.0.0"
+  #
+  # 1.0.1 drops Mongo: the service is Postgres-only now that the global tier is
+  # Cloud SQL. It is a new tag rather than a rebuilt 1.0.0 because pullPolicy is
+  # IfNotPresent — nodes that already cached 1.0.0 would keep serving the old
+  # image, which crashes on the missing GLOBAL_MONGO_URL.
+  tag: "1.0.1"
 
 # The image runs as uid 65532. The kubelet can't check a user given by name
 # against runAsNonRoot, so the number is pinned here.
