@@ -20,4 +20,4 @@ httpRoute:
 
 # Written by org-apps CI on every push to main (short commit sha).
 image:
-  tag: "8ae0ec5"
+  tag: "87d4091"

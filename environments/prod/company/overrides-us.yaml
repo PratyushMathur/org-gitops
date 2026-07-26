@@ -26,4 +26,4 @@ rollout:
 # Written by org-apps CI on every push to main (short commit sha), same tag as
 # overrides-in.yaml in the same commit.
 image:
-  tag: "8ae0ec5"
+  tag: "87d4091"
