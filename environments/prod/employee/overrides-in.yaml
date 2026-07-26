@@ -1,0 +1,18 @@
+# India (asia-south1) — applied to any prod cluster labelled region=in.
+#
+# Layered on top of helm/employee/values.yaml. Helm replaces lists, so
+# ingress.hosts and ingress.tls are written out in full. Maps like config merge.
+#
+# Note what isn't here: the regional Postgres and Redis URLs. They're the same
+# Service names in every region and resolve to a different server in each, so
+# the regional database needs no per-region configuration at all.
+
+config:
+  REGION: asia-south1
+  CLUSTER: cluster-a
+
+# Same hostname as company in this region — the two are separated by path
+# (/employees vs /companies) on the one Gateway, not by name.
+httpRoute:
+  hostnames:
+    - api-ind.pynd.dev

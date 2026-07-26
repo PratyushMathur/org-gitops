@@ -102,12 +102,64 @@ service:
       targetPort: http
       protocol: TCP
 
+# Legacy north-south path, for clusters running an Ingress controller. The prod
+# clusters front apps with the GKE Gateway instead — see `httpRoute` below.
 ingress:
   enabled: false
   className: ""
   annotations: {}
   hosts: []
   tls: []
+
+# The app's slice of the shared Gateway. Rendered by `base.all`; attaches to a
+# Gateway someone else owns (helm/gateway), so enabling it here creates no load
+# balancer of its own.
+httpRoute:
+  enabled: false
+  # Which Gateway to attach to. `sectionName` picks the listener by name.
+  parentRefs:
+    - name: api
+      sectionName: http
+  # Usually set per region, since the hostname is what differs between clusters.
+  hostnames: []
+  annotations: {}
+  # `pathType` accepts the Ingress spelling ("Prefix") as well as Gateway API's
+  # ("PathPrefix"). `servicePort` takes a name from service.ports or a number.
+  paths:
+    - path: /
+      pathType: PathPrefix
+      servicePort: http
+  # Raw HTTPRoute rules appended after the generated ones — redirects, rewrites,
+  # header mutation, anything `paths` does not express.
+  extraRules: []
+
+# The Gateway itself. Off for application charts: it is per-cluster
+# infrastructure rendered by exactly one release (helm/gateway), never by each
+# app. Not part of `base.all` — include `base.gateway` explicitly.
+gateway:
+  enabled: false
+  # Defaults to the release fullname; pin it, because httpRoute.parentRefs
+  # references this name from other charts.
+  name: ""
+  # Regional external ALB, matching the regional static IPs Terraform reserves.
+  className: gke-l7-regional-external-managed
+  # Reserved static IP claimed by name (google_compute_address in org-infra).
+  addressName: ""
+  # Literal IP, if there is no reserved address to name. `addressName` wins.
+  addressIP: ""
+  # Certificate Manager map — Google-managed certs, so there is no Secret and no
+  # listener certificateRef. Empty until the domain is delegated.
+  certificateMap: ""
+  annotations: {}
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      # Same namespace only: the Gateway sits alongside the apps it serves, so
+      # no ReferenceGrant is needed. Widen to `All` for a cross-namespace one.
+      allowedRoutes:
+        namespaces:
+          from: Same
 
 autoscaling:
   enabled: false
@@ -116,6 +168,26 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: ""
   behavior: {}
+
+# Canary track, rendered by `base.canary` (opt-in — see templates/_canary.tpl).
+# Keys other than enabled/weight/header/headerValue are deep-merged over the
+# stable values, so the canary inherits everything it does not restate.
+canary:
+  enabled: false
+  # Percent of ingress traffic sent to the canary.
+  weight: 10
+  # Request header that forces a request onto the canary regardless of weight,
+  # so the new version can be exercised deterministically. Set to "" to disable.
+  header: X-Canary
+  headerValue: always
+  # A fixed, small canary: it exists to be observed, not to carry load, and an
+  # HPA underneath it would make the traffic share and the capacity disagree.
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  # No PDB: draining a node should never be blocked by the canary.
+  pdb:
+    enabled: false
 
 # Opt-in: a PDB in front of a single replica blocks node drains.
 pdb:

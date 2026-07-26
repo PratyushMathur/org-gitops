@@ -9,7 +9,7 @@
 # per-environment overrides.yaml files were folded in here deliberately, so
 # staging now deploys the same configuration as prod (a different namespace, from
 # config.yaml, is the only difference). Settings that genuinely differ between
-# prod clusters still live in environments/prod/canary-app/overrides-<cluster>.yaml.
+# regions still live in environments/prod/canary-app/overrides-<region>.yaml.
 
 component: web
 partOf: canary
@@ -19,13 +19,22 @@ image:
   # Quoted: unquoted 1.0 is a YAML float and renders as ":1".
   tag: "1.0"
 
-# No `ports` or `service` block: nginx-unprivileged listens on 8080 as uid 101,
-# which is already the base default (and already satisfies its runAsNonRoot
-# requirement), as is the http:80 -> http service mapping.
+# No `ports` or `service` block: the image's entrypoint (/canary-app) listens on
+# 8080, which is already the base default, as is the http:80 -> http service
+# mapping.
+
+# The image declares `USER nonroot:nonroot` - a *name*, not a UID. The base
+# defaults set runAsNonRoot: true and deliberately no runAsUser, so the kubelet
+# refuses the container with "image has non-numeric user (nonroot), cannot verify
+# user is non-root". Pinning the numeric id from the image's /etc/passwd
+# (nonroot:x:65532:65532) is what satisfies that check.
+podSecurityContext:
+  runAsUser: 65532
+  runAsGroup: 65532
 
 securityContext:
-  # Base defaults this to true. The nginx entrypoint rewrites files under
-  # /etc/nginx and /tmp at startup, so this image needs a writable rootfs.
+  # Base defaults this to true. Left off until the binary is confirmed not to
+  # write to its root filesystem at startup.
   readOnlyRootFilesystem: false
 
 readinessProbe:
@@ -82,14 +91,14 @@ ingress:
   # Top-level endpoint, served by every cluster. Per-cluster files add their own
   # regional hostname alongside this one.
   hosts:
-    - host: demo.fynd.dev
+    - host: demo.pynd.dev
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: canary-app-tls
       hosts:
-        - demo.fynd.dev
+        - demo.pynd.dev
 
 config:
   LOG_LEVEL: warn

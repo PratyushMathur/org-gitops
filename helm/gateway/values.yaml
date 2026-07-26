@@ -1,0 +1,45 @@
+# gateway — the shared entry point for a cluster.
+#
+# What differs per cluster is only the static IP it claims, so that is the one
+# setting in environments/prod/gateway/overrides-<region>.yaml. Everything else
+# is identical in every region on purpose: the apps' HTTPRoutes reference this
+# Gateway by a name that must not vary.
+
+component: ingress
+partOf: platform
+
+gateway:
+  enabled: true
+  # Pinned, not derived from the release name. Every app chart names this in
+  # `httpRoute.parentRefs`, so it is part of the contract between the charts.
+  name: api
+  # Regional, matching the regional external IPs Terraform reserves per region.
+  # A global ALB would need a global address and would not use these.
+  className: gke-l7-regional-external-managed
+  # addressName comes from the per-region overrides — api-ind / api-us.
+
+  # HTTP only for now. Certificate Manager cannot validate a domain with no NS
+  # delegation, so org-infra keeps `gateway_certs_enabled: false` and there is no
+  # certificate map to attach yet. Once pynd.dev is delegated and Terraform
+  # creates the maps, add here:
+  #
+  #   certificateMap: api-us          # per region
+  #   listeners:
+  #     - name: http                  # keep, or swap for a 301 redirect route
+  #       protocol: HTTP
+  #       port: 80
+  #       allowedRoutes: { namespaces: { from: Same } }
+  #     - name: https
+  #       protocol: HTTPS
+  #       port: 443
+  #       # No certificateRefs: the cert is Google-managed and comes from the
+  #       # certmap annotation above, not from a Secret in this namespace.
+  #       tls: { mode: Terminate }
+  #       allowedRoutes: { namespaces: { from: Same } }
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same

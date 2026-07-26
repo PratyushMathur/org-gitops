@@ -1,0 +1,103 @@
+# company — the global service.
+#
+# Only the differences from the org defaults are listed; everything else comes
+# from helm/base. What changes per region (REGION, CLUSTER, the regional
+# hostname, the canary weight) lives in
+# environments/prod/company/overrides-<region>.yaml.
+
+component: api
+partOf: demo
+
+image:
+  repository: us-docker.pkg.dev/fynd-project-trial/apps/company
+  # Quoted, or YAML reads 1.0 as a float and renders ":1". The base chart also
+  # passes this to the app as VERSION.
+  tag: "1.0.0"
+
+# The image runs as uid 65532. The kubelet can't check a user given by name
+# against runAsNonRoot, so the number is pinned here.
+podSecurityContext:
+  runAsUser: 65532
+  runAsGroup: 65532
+
+# Flask writes .pyc files unless told not to, so the read-only root filesystem
+# the base chart sets by default is turned off here. Simpler than fighting it
+# for a demo.
+securityContext:
+  readOnlyRootFilesystem: false
+
+env:
+  - name: POD_NAME
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.name
+
+# Database URLs contain passwords, so they come from a Secret (created below).
+envFrom:
+  - secretRef:
+      name: company-db
+
+config:
+  GLOBAL_MONGO_DATABASE: company
+  # REGION and CLUSTER come from the per-region files.
+  # VERSION and TRACK are added by the base chart.
+
+# DEMO PASSWORD in git. Fine for a review environment, not for a real one — in
+# production set `extraObjects: []` and let External Secrets create a Secret of
+# the same name instead.
+#
+# Both hostnames resolve through the private DNS zone `internal.`, which is
+# attached to the hub and to every spoke VPC, so they point at the same hub VM
+# from either region. That is what makes this tier global.
+extraObjects:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: company-db
+    type: Opaque
+    stringData:
+      GLOBAL_POSTGRES_URL: "postgresql://app:demo@global-postgres.internal:5432/company"
+      GLOBAL_MONGO_URL: "mongodb://global-mongo.internal:27017"
+
+# /healthz doesn't touch the database, so a database outage won't get every pod
+# restarted. /readyz does, so an affected pod leaves the Service instead.
+livenessProbe:
+  httpGet: { path: /healthz, port: http }
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet: { path: /readyz, port: http }
+  periodSeconds: 10
+
+resources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits: { memory: 256Mi }
+
+replicaCount: 2
+
+# Fronted by the cluster's shared Gateway (helm/gateway), not by an Ingress
+# controller — the prod clusters run neither ingress-nginx nor cert-manager.
+#
+# The hostname is the cluster's, not the app's: both regions expose exactly one
+# name (api-ind / api-us), so apps are told apart by path. This one owns
+# /companies. /healthz, /readyz and /version stay in-cluster and are deliberately
+# not routed from outside.
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: api
+      sectionName: http
+  # hostnames come from environments/prod/company/overrides-<region>.yaml
+  paths:
+    - path: /companies
+      pathType: PathPrefix
+      servicePort: http
+
+# A second version behind a weighted ingress split: 20% of requests get 2.0.0.
+# Both report which they are on /version and in the X-Track header, so the split
+# is visible from outside. `curl -H "X-Canary: always"` always hits the canary.
+canary:
+  enabled: true
+  weight: 20
+  image:
+    tag: "2.0.0"

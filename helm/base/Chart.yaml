@@ -2,10 +2,14 @@ apiVersion: v2
 name: base
 description: >-
   Org-wide base library chart. Provides the standard Deployment, Service,
-  ServiceAccount, Ingress, HPA, PDB and ConfigMap templates plus the opinionated
-  defaults every application chart inherits.
+  ServiceAccount, Ingress, HTTPRoute, Gateway, HPA, PDB and ConfigMap templates
+  plus the opinionated defaults every application chart inherits, plus opt-in
+  canary releases.
 type: library
-version: 0.1.0
+# 0.3.0 adds `base.httproute` and `base.gateway`, and teaches `base.canary` to
+# express its split as weighted HTTPRoute backendRefs. Additive — 0.2.0 charts
+# render unchanged, since httpRoute.enabled and gateway.enabled default to false.
+version: 0.3.0
 keywords:
   - base
   - library

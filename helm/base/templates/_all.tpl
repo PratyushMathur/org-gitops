@@ -19,6 +19,7 @@ directly instead if a chart needs finer control.
       (include "base.deployment" $ctx)
       (include "base.service" $ctx)
       (include "base.ingress" $ctx)
+      (include "base.httproute" $ctx)
       (include "base.hpa" $ctx)
       (include "base.pdb" $ctx) -}}
 {{- range $v.extraObjects }}

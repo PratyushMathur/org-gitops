@@ -1,8 +1,9 @@
-# cluster-a overrides for canary-app in prod.
+# India (asia-south1) overrides for canary-app in prod.
 #
-# Layered on top of helm/canary-app/values.yaml by the apps-prod ApplicationSet.
-# Only settings that genuinely differ between prod clusters belong here -
-# anything shared stays in the chart's values.yaml so it cannot drift.
+# Selected by the apps-prod ApplicationSet for any prod cluster whose Secret
+# carries `region=in`, and layered on top of helm/canary-app/values.yaml. Only
+# settings that genuinely differ between regions belong here - anything shared
+# stays in the chart's values.yaml so it cannot drift.
 #
 # Helm REPLACES lists rather than merging them, so ingress.hosts and ingress.tls
 # are restated in full below. Maps (like config) do merge.
@@ -24,7 +25,7 @@ ingress:
       paths:
         - path: /
           pathType: Prefix
-    # Regional endpoint (ap-south-1), for targeted smoke tests and failover
+    # Regional endpoint (asia-south1), for targeted smoke tests and failover
     # cutover.
     - host: in.demo.pynd.dev
       paths:

@@ -54,12 +54,13 @@ spec:
           helm:
             releaseName: "{{.app}}"
             ignoreMissingValueFiles: true
-            # Only a per-cluster layer remains, and no staging cluster has one
-            # yet. Kept so adding one needs no change here.
+            # Keyed on the cluster Secret's `region` label, matching apps-prod.
+            # No staging region has an overrides file yet; this is here so adding
+            # one needs no change in this ApplicationSet.
             valueFiles:
-              - $values/environments/{{.env}}/{{.app}}/overrides-{{.nameNormalized}}.yaml
+              - $values/environments/{{.env}}/{{.app}}/overrides-{{ index .metadata.labels "region" | default "none" }}.yaml
         # Second source exists only to expose the repo as $values above, so the
-        # per-cluster overrides can live outside the chart directory.
+        # per-region overrides can live outside the chart directory.
         - repoURL: https://github.com/PratyushMathur/org-gitops.git
           targetRevision: HEAD
           ref: values

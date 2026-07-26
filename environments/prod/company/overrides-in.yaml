@@ -1,0 +1,21 @@
+# India (asia-south1) — applied to any prod cluster labelled region=in.
+#
+# Layered on top of helm/company/values.yaml. Helm replaces lists, so
+# ingress.hosts and ingress.tls are written out in full. Maps like config merge.
+
+# What the service reports as its region, and what it stamps on every company
+# row it writes — which is how a company added here is still attributable when
+# it's read back from the US.
+config:
+  REGION: asia-south1
+  CLUSTER: cluster-a
+
+# The region's own hostname, resolved by the A record Terraform publishes for the
+# static IP this cluster's Gateway claims. There is no shared name across both
+# clusters any more: the previous company.demo.fynd.dev needed a global load
+# balancer in front of two regional ones, and nothing serves it today.
+httpRoute:
+  hostnames:
+    - api-ind.pynd.dev
+
+# Canary weight stays at the chart's 20% here. India leads the rollout.

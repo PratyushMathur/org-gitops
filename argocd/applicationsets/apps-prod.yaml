@@ -55,15 +55,23 @@ spec:
           path: "{{.chartPath}}"
           helm:
             releaseName: "{{.app}}"
-            # The per-cluster file is optional - most apps are identical on
-            # every prod cluster and need nothing beyond the chart's values.yaml.
+            # The per-region file is optional - a region with nothing to override
+            # needs nothing beyond the chart's values.yaml.
             ignoreMissingValueFiles: true
-            # Only a per-cluster layer remains. App and environment values both
-            # live in the chart's own values.yaml.
+            # Keyed on the cluster Secret's `region` label, NOT on the cluster
+            # name: the name is an operational detail (the control plane is
+            # always `in-cluster`), while the region is what the overrides
+            # actually describe. `index` rather than .metadata.labels.region so
+            # an unlabelled cluster yields "none" instead of tripping
+            # missingkey=error; overrides-none.yaml does not exist and is
+            # skipped.
+            #
+            # Label a cluster with:
+            #   argocd cluster add <ctx> --name <n> --label env=prod --label region=us
             valueFiles:
-              - $values/environments/{{.env}}/{{.app}}/overrides-{{.nameNormalized}}.yaml
+              - $values/environments/{{.env}}/{{.app}}/overrides-{{ index .metadata.labels "region" | default "none" }}.yaml
         # Second source exists only to expose the repo as $values above, so the
-        # env overrides can live outside the chart directory.
+        # per-region overrides can live outside the chart directory.
         - repoURL: https://github.com/PratyushMathur/org-gitops.git
           targetRevision: HEAD
           ref: values

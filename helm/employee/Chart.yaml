@@ -1,0 +1,13 @@
+apiVersion: v2
+name: employee
+description: >-
+  Regional service. Employee records live in the Postgres and Redis inside the
+  serving cluster, and it calls the company service for the global lookup.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: base
+    version: 0.3.0
+    repository: "file://../base"

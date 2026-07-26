@@ -1,0 +1,7 @@
+# Registers the employee service in prod. No cluster is named on purpose — the
+# ApplicationSet deploys it to every cluster labelled env=prod.
+app: employee
+env: prod
+chartPath: helm/employee
+namespace: demo
+argoProject: apps-prod

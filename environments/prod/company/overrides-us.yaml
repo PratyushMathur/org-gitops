@@ -1,0 +1,18 @@
+# US (us-central1) — applied to any prod cluster labelled region=us.
+#
+# Layered on top of helm/company/values.yaml. Helm replaces lists, so
+# ingress.hosts and ingress.tls are written out in full. Maps like config merge.
+
+config:
+  REGION: us-central1
+  CLUSTER: cluster-b
+
+# See overrides-in.yaml.
+httpRoute:
+  hostnames:
+    - api-us.pynd.dev
+
+# Same release, held further back here: India is at 20%, the US at 5%. Rolling a
+# canary out one region at a time is exactly why this file exists.
+canary:
+  weight: 5

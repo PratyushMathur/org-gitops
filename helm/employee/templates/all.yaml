@@ -1,0 +1,2 @@
+{{ include "base.all" . }}
+{{ include "base.canary" . }}

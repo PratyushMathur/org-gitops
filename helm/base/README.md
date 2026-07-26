@@ -4,8 +4,9 @@ Org-wide Helm **library chart**. Every application chart in this repo depends on
 it instead of carrying its own copy of a `helm create` scaffold.
 
 It renders the standard object set — ServiceAccount, ConfigMap, Deployment,
-Service, Ingress, HPA, PodDisruptionBudget — from one shared set of templates,
-and supplies the defaults an app chart would otherwise have to restate.
+Service, Ingress, HTTPRoute, HPA, PodDisruptionBudget — from one shared set of
+templates, and supplies the defaults an app chart would otherwise have to
+restate.
 
 ## Using it
 
@@ -36,8 +37,140 @@ Then `helm dependency update .` once, and commit the resulting `Chart.lock`.
 
 Charts needing finer control can skip `base.all` and include the individual
 templates instead (`base.deployment`, `base.service`, `base.ingress`,
-`base.hpa`, `base.pdb`, `base.configmap`, `base.serviceaccount`), alongside
-their own hand-written templates in the same directory.
+`base.httproute`, `base.hpa`, `base.pdb`, `base.configmap`,
+`base.serviceaccount`), alongside their own hand-written templates in the same
+directory.
+
+## Getting traffic in
+
+Two north-south paths, both off by default. Enable exactly one.
+
+| | `ingress` | `httpRoute` |
+| --- | --- | --- |
+| Object | `Ingress` | `HTTPRoute` |
+| Needs | an Ingress controller in-cluster | a `Gateway` to attach to |
+| Creates the LB | the controller | the Gateway, not the route |
+| Canary split | second Ingress, nginx annotations | weighted `backendRefs`, one object |
+
+The prod clusters run neither ingress-nginx nor cert-manager; they front apps
+with the GKE Gateway, so `company` and `employee` use `httpRoute`. `ingress` is
+kept for clusters that do run a controller.
+
+```yaml
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: api           # the Gateway, by name
+      sectionName: http   # which listener
+  hostnames: [api-us.pynd.dev]
+  paths:
+    - path: /companies
+      pathType: PathPrefix   # "Prefix" is accepted too
+      servicePort: http      # name from service.ports, or a number
+```
+
+Anything `paths` cannot express — redirects, rewrites, header mutation — goes in
+`httpRoute.extraRules` as raw Gateway API rules, appended after the generated
+ones.
+
+Two routes on one Gateway must not claim the same hostname **and** the same
+path. Gateway API settles that conflict by creation timestamp, so the loser
+stops serving without erroring. Where several apps share a hostname, give each
+its own path prefix.
+
+### The Gateway itself
+
+`base.gateway` is deliberately **not** part of `base.all`. A Gateway is
+per-cluster infrastructure shared by every app; if each app chart rendered one
+they would fight over the same static IP. Exactly one chart renders it —
+[`helm/gateway`](../gateway) — and app charts reference it by name:
+
+```yaml
+# helm/gateway/values.yaml
+gateway:
+  enabled: true
+  name: api
+  className: gke-l7-regional-external-managed
+  addressName: api-us     # a reserved static IP, claimed by name
+```
+
+The IP is named rather than written literally, so recreating the Gateway does
+not renumber the DNS record that Terraform published for it.
+
+## Canary releases
+
+`base.all` renders the stable track. `base.canary` renders a second, smaller
+copy of the same workload — ConfigMap, Deployment, Service, and on the Ingress
+path a second Ingress — behind a weighted split:
+
+```yaml
+# templates/all.yaml
+{{ include "base.all" . }}
+{{ include "base.canary" . }}
+```
+
+```yaml
+# values.yaml
+canary:
+  enabled: true
+  weight: 20          # percent of north-south traffic
+  image:
+    tag: "2.0.0"
+```
+
+Where the weight is expressed depends on the path in use. With `httpRoute` it
+becomes weighted `backendRefs` inside the app's single route — Gateway API takes
+weights natively, so no second routing object is rendered:
+
+```yaml
+rules:
+  - matches: [{path: {type: PathPrefix, value: /companies}}]
+    backendRefs:
+      - {name: company,        port: 80, weight: 80}
+      - {name: company-canary, port: 80, weight: 20}
+```
+
+With `ingress` it becomes a second Ingress carrying ingress-nginx's
+`canary-weight` annotations, described below.
+
+Everything under `canary` except the control keys (`enabled`, `weight`,
+`header`, `headerValue`) is deep-merged over the stable values, so the canary
+inherits probes, resources and config unless it deliberately differs. Defaults
+give it one replica, no HPA and no PDB — it exists to be observed, not to carry
+load.
+
+The canary gets its own `app.kubernetes.io/name`, which is what keeps its pods
+out of the stable Service. Two consequences worth knowing:
+
+- **The split is north-south only.** In-cluster callers resolve the stable
+  Service and never reach the canary. That is deliberate — a canary should not
+  silently take east-west traffic nobody is watching.
+- **cert-manager annotations are stripped** from the canary Ingress, which
+  otherwise would request a second certificate for hosts the stable Ingress
+  already owns. The canary reuses the stable TLS secret. (Ingress path only —
+  an HTTPRoute renders no second object to strip anything from.)
+
+`canary.header` (default `X-Canary`) makes the new version reachable
+deterministically — `curl -H "X-Canary: always"` — instead of only by chance.
+Confirming a 5% canary otherwise means issuing enough requests to be
+statistically sure. On the Ingress path this is the `canary-by-header`
+annotation; on the HTTPRoute path it is an extra rule carrying a header match.
+Gateway API ranks matches by specificity rather than order, and a rule with
+header matches always outranks one without, so the header wins over the weight
+either way.
+
+## VERSION and TRACK
+
+Any chart that sets `config` gets two keys injected into its ConfigMap:
+
+| Key | Value |
+| --- | --- |
+| `VERSION` | the image tag (or `Chart.appVersion`) |
+| `TRACK` | `stable`, or `canary` on the canary track |
+
+`VERSION` is derived from the image tag rather than restated in `config`, so the
+version a workload reports can never drift from the image it is running. A chart
+that sets either key explicitly still wins.
 
 ## How defaults work
 
@@ -80,14 +213,29 @@ table above, the notable keys are:
 - `commonLabels` / `commonAnnotations` — applied to every rendered object.
 - `config` — a flat key/value map. Rendered as a ConfigMap, wired into the
   container via `envFrom`, and hashed into `checksum/config` on the pod
-  template so pods roll when it changes. For file-style config, declare a
-  ConfigMap under `extraObjects` and mount it via `volumes`/`volumeMounts`.
+  template so pods roll when it changes. `VERSION` and `TRACK` are injected —
+  see above. For file-style config, declare a ConfigMap under `extraObjects`
+  and mount it via `volumes`/`volumeMounts`.
+- `canary` — opt-in second track. See the canary section above.
 - `ports` — container ports. `service.ports` and probes refer to them by name.
 - `ingress.hosts[].paths[]` — `path`, `pathType` (default `Prefix`), and
   optional `servicePort` (name or number, defaults to `http`).
+- `httpRoute.paths[]` — the same three keys, except `pathType` defaults to
+  `PathPrefix` and also accepts Ingress's `Prefix` spelling. `httpRoute.hostnames`
+  is a top-level list, not per-path as on an Ingress.
+- `httpRoute.parentRefs` — which Gateway and listener to attach to. Required
+  when `httpRoute.enabled`.
+- `httpRoute.extraRules` — raw Gateway API rules appended after the generated
+  ones, for redirects, rewrites and header mutation.
+- `gateway` — the Gateway object. Not in `base.all`; rendered only by
+  `helm/gateway`. See the traffic section above.
 - `initContainers` / `sidecars` — raw container specs appended to the pod.
 - `extraObjects` — raw manifests appended to the release, each run through
-  `tpl`, so `{{ include "base.fullname" . }}` works inside them.
+  `tpl`, so `{{ include "base.fullname" . }}` works inside them. Entries must be
+  **maps, not strings**: they are serialised with `toYaml` before templating, so
+  a string entry renders as a YAML block scalar and fails to parse. For the same
+  reason, only scalars can be templated — a helper emitting a multi-line block,
+  such as `include "base.labels"`, cannot be substituted into a value there.
 
 ## Changing this chart
 

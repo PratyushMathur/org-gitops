@@ -1,0 +1,5 @@
+{{/*
+`base.gateway`, not `base.all`: this release is a Gateway and nothing else — no
+Deployment, no Service, no ServiceAccount. See helm/base/templates/_gateway.tpl.
+*/}}
+{{ include "base.gateway" . }}

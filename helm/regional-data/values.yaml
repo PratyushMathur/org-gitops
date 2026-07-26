@@ -1,0 +1,51 @@
+# regional-data — the per-region Postgres and Redis.
+#
+# There are deliberately NO per-region overrides for this chart. Every cluster
+# gets an identical release, and that is the whole point: `regional-data-postgres`
+# resolves inside cluster-a to a server that only cluster-a can reach, and inside
+# cluster-b to a different one. The name is shared; the data is not.
+#
+# SCOPE: this is a review/demo data tier — a single replica per engine, no
+# replication, no backups, no failover, and a password in git. In production the
+# regional tier would be Cloud SQL and Memorystore instances per region, created
+# in org-infra alongside the global VM, and this chart would be deleted rather
+# than hardened. It exists so the regional data path is real and runnable
+# without provisioning managed services first.
+
+nameOverride: ""
+
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  # Consumed by the employee service as REGIONAL_POSTGRES_URL.
+  database: employee
+  username: app
+  password: demo
+  port: 5432
+  storage:
+    size: 5Gi
+    # Unset means the cluster's default StorageClass, which on GKE is
+    # standard-rwo. Pin it here if a specific class is required.
+    className: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  port: 6379
+  storage:
+    size: 1Gi
+    className: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+commonLabels: {}

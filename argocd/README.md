@@ -52,8 +52,8 @@ Clusters are identified by a **label on their Argo CD cluster Secret**, never by
 a hardcoded API URL:
 
 ```bash
-argocd cluster add <kube-context> --name cluster-a --label env=prod
-argocd cluster add <kube-context> --name cluster-b --label env=prod
+argocd cluster add <kube-context> --name cluster-a --label env=prod --label region=in
+argocd cluster add <kube-context> --name cluster-b --label env=prod --label region=us
 argocd cluster add <kube-context> --name cluster-s --label env=staging
 ```
 
@@ -78,7 +78,7 @@ Three layers, lowest to highest:
 
 1. `helm/base` — org defaults (`templates/_defaults.tpl`)
 2. `helm/<app>/values.yaml` — **all** app and environment settings
-3. `environments/<env>/<app>/overrides-<cluster>.yaml` — per-cluster overrides,
+3. `environments/<env>/<app>/overrides-<region>.yaml` — per-region overrides,
    **optional** (`ignoreMissingValueFiles: true`)
 
 There is deliberately **no per-environment layer**. `helm/<app>/values.yaml` is
@@ -93,9 +93,15 @@ reintroduce a layer between 2 and 3 rather than special-casing the chart.
 
 Layer 3 exists for the cases where two prod clusters genuinely differ. For
 `canary-app` that is the regional ingress hostname and the `CLUSTER`/`REGION`
-config values — see `environments/prod/canary-app/overrides-cluster-{a,b}.yaml`.
+config values — see `environments/prod/canary-app/overrides-{in,us}.yaml`.
 Keep it to what actually differs; anything shared belongs in layer 2 where it
 cannot drift between clusters.
+
+`company` uses it for one more thing: `canary.weight` is 20 in `in` and 5 in
+`us`, because rolling a canary out region by region is exactly the kind of
+difference this layer is for. `regional-data` is the opposite case and has no
+layer-3 file at all — every cluster gets an identical release, and the data is
+separate because the clusters are.
 
 Helm **replaces** lists rather than merging them, so a per-cluster file that
 touches `ingress.hosts` must restate the whole list, including the shared
@@ -115,16 +121,16 @@ Reproduce what a given cluster will get:
 # every cluster with no per-cluster file, including all of staging
 helm template canary-app helm/canary-app --namespace canary-prod
 
-# exactly what cluster-a will receive
+# exactly what a region=in cluster will receive
 helm template canary-app helm/canary-app \
-  -f environments/prod/canary-app/overrides-cluster-a.yaml \
+  -f environments/prod/canary-app/overrides-in.yaml \
   --namespace canary-prod
 
 # diff two prod clusters
 diff <(helm template canary-app helm/canary-app \
-        -f environments/prod/canary-app/overrides-cluster-a.yaml --namespace canary-prod) \
+        -f environments/prod/canary-app/overrides-in.yaml --namespace canary-prod) \
      <(helm template canary-app helm/canary-app \
-        -f environments/prod/canary-app/overrides-cluster-b.yaml --namespace canary-prod)
+        -f environments/prod/canary-app/overrides-us.yaml --namespace canary-prod)
 ```
 
 ## Why two ApplicationSets
@@ -178,13 +184,13 @@ Repo-specific values are placeholders and need replacing:
   quickest check.
 - The staging cluster name is assumed, not known — nothing here hardcodes it,
   but the `argocd cluster add` example uses `cluster-s`.
-- Both prod clusters serve the top-level `demo.fynd.dev` plus a regional
-  hostname — `in.demo.fynd.dev` on cluster-a, `us.demo.fynd.dev` on cluster-b —
+- Both prod clusters serve the top-level `demo.pynd.dev` plus a regional
+  hostname — `in.demo.pynd.dev` on cluster-a, `us.demo.pynd.dev` on cluster-b —
   which assumes active/active behind a global load balancer. If that is not the
   topology, drop the shared host from the per-cluster files.
-- The regions in the per-cluster files are still placeholders, and cluster-b's
-  `ap-southeast-1` (Singapore) does not match the `us.` hostname it serves.
-  Fix one or the other before this reaches DNS.
+- The per-region files are selected by the cluster Secret's `region` label, not
+  by cluster name. A prod cluster with no `region` label silently gets only the
+  chart's values — `ignoreMissingValueFiles: true` hides the miss.
 - Both prod clusters reference the same `canary-app-tls` secret name, but each
   covers a different SAN list — they are separate certificates in separate
   clusters, issued by cert-manager per cluster.

@@ -1,0 +1,87 @@
+# employee — the regional service.
+#
+# Only the differences from the org defaults are listed; everything else comes
+# from helm/base. What changes per region lives in
+# environments/prod/employee/overrides-<region>.yaml.
+
+component: api
+partOf: demo
+
+image:
+  repository: us-docker.pkg.dev/fynd-project-trial/apps/employee
+  tag: "1.0.0"
+
+podSecurityContext:
+  runAsUser: 65532
+  runAsGroup: 65532
+
+# See helm/company/values.yaml — Flask writes .pyc files.
+securityContext:
+  readOnlyRootFilesystem: false
+
+env:
+  - name: POD_NAME
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.name
+
+envFrom:
+  - secretRef:
+      name: employee-db
+
+config:
+  # The company service in THIS cluster, so the global lookup is genuinely made
+  # from this region. (In-cluster traffic always reaches the stable pods; the
+  # canary split happens at the ingress.)
+  COMPANY_API_URL: "http://company"
+
+# DEMO PASSWORD in git — see helm/company/values.yaml.
+#
+# These are plain in-cluster Service names pointing at the Postgres and Redis the
+# regional-data chart runs in this cluster. Nothing sends them over the VPC
+# peering, which is what makes this tier regional: the same name is a different
+# server in each region.
+extraObjects:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: employee-db
+    type: Opaque
+    stringData:
+      REGIONAL_POSTGRES_URL: "postgresql://app:demo@regional-data-postgres:5432/employee"
+      REGIONAL_REDIS_URL: "redis://regional-data-redis:6379/0"
+
+livenessProbe:
+  httpGet: { path: /healthz, port: http }
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet: { path: /readyz, port: http }
+  periodSeconds: 10
+
+resources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits: { memory: 256Mi }
+
+replicaCount: 2
+
+# See helm/company/values.yaml — same arrangement, different path prefix. Both
+# apps share one Gateway and one hostname per region, so /employees is what
+# separates this service from /companies.
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: api
+      sectionName: http
+  # hostnames come from environments/prod/employee/overrides-<region>.yaml
+  paths:
+    - path: /employees
+      pathType: PathPrefix
+      servicePort: http
+
+# A different weight from company's 20%, so it's clear the two are independent.
+canary:
+  enabled: true
+  weight: 50
+  image:
+    tag: "2.0.0"

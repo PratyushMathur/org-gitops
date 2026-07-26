@@ -1,0 +1,15 @@
+apiVersion: v2
+name: company
+description: >-
+  Global service. Company records live in the Postgres and Mongo shared by every
+  region, so a company added in one region is visible from the other.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: base
+    version: 0.3.0
+    # Resolved from this repo — Argo CD's repo-server checks out the whole
+    # repository and runs `helm dependency build`.
+    repository: "file://../base"

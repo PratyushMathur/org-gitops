@@ -1,0 +1,13 @@
+# US (us-central1) — applied to any prod cluster labelled region=us.
+#
+# Layered on top of helm/employee/values.yaml. Helm replaces lists, so
+# ingress.hosts and ingress.tls are written out in full. Maps like config merge.
+
+config:
+  REGION: us-central1
+  CLUSTER: cluster-b
+
+# See overrides-in.yaml.
+httpRoute:
+  hostnames:
+    - api-us.pynd.dev

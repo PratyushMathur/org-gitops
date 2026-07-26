@@ -1,0 +1,15 @@
+apiVersion: v2
+name: gateway
+description: >-
+  The cluster's shared north-south Gateway. One release per cluster; the GKE
+  Gateway controller turns it into a regional external ALB fronted by the static
+  IP Terraform reserved for that region. Application charts attach to it with
+  HTTPRoutes rather than rendering a Gateway of their own.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: base
+    version: 0.3.0
+    repository: "file://../base"

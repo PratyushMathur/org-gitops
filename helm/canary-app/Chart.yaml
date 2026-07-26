@@ -7,7 +7,7 @@ appVersion: "1.27-alpine"
 
 dependencies:
   - name: base
-    version: 0.1.0
+    version: 0.3.0
     # Resolved from this repo. Argo CD's repo-server checks out the whole
     # repository and runs `helm dependency build`, so the relative path works
     # without publishing the base chart anywhere.

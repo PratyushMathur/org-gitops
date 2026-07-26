@@ -1,0 +1,8 @@
+# India (asia-south1) — applied to any prod cluster labelled region=in.
+#
+# The one thing that differs per cluster: which reserved IP this Gateway claims.
+# `api-ind` is a google_compute_address in org-infra
+# (live/prod/cluster-a/platform/main.tf), and api-ind.pynd.dev already points at
+# it, so the name — not the address — is what travels between the two repos.
+gateway:
+  addressName: api-ind
