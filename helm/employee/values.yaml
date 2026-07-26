@@ -35,21 +35,40 @@ config:
   # from this region. In-cluster traffic always reaches the stable pods.
   COMPANY_API_URL: "http://company"
 
-# DEMO PASSWORD in git — see helm/company/values.yaml.
+# The database credential, synced from GCP Secret Manager by External Secrets —
+# see helm/company/values.yaml for the escaping and why host/user/database stay
+# here.
+#
+# REGIONAL_REDIS_URL is carried too even though it holds no password: ESO owns this
+# whole Secret, and the app does os.environ["REGIONAL_REDIS_URL"], so a key left
+# out here is a crash rather than a default.
 #
 # `regional-postgres.internal` is this region's own Cloud SQL instance. The name
-# exists only in the spoke's own `internal.` zone and answers with a PSC endpoint
-# in that same VPC, so it is a different server in each region — which is what
-# makes this tier regional, as against global-postgres.internal.
+# exists only in the spoke's own `internal.` zone and answers with a PSC endpoint in
+# that same VPC, so it is a different server in each region — which is what makes
+# this tier regional, as against global-postgres.internal.
 extraObjects:
-  - apiVersion: v1
-    kind: Secret
+  - apiVersion: external-secrets.io/v1
+    kind: ExternalSecret
     metadata:
       name: employee-db
-    type: Opaque
-    stringData:
-      REGIONAL_POSTGRES_URL: "postgresql://app:demo@regional-postgres.internal:5432/employee"
-      REGIONAL_REDIS_URL: "redis://regional-data-redis:6379/0"
+    spec:
+      refreshInterval: 1h
+      secretStoreRef:
+        name: gcp-secret-manager
+        kind: ClusterSecretStore
+      target:
+        name: employee-db
+        creationPolicy: Owner
+        template:
+          engineVersion: v2
+          data:
+            REGIONAL_POSTGRES_URL: "postgresql://app:{{ `{{ .password }}` }}@regional-postgres.internal:5432/employee"
+            REGIONAL_REDIS_URL: "redis://regional-data-redis:6379/0"
+      data:
+        - secretKey: password
+          remoteRef:
+            key: db-app-password
 
 livenessProbe:
   httpGet: { path: /healthz, port: http }
