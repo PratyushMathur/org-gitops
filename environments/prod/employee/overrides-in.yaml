@@ -27,4 +27,4 @@ httpRoute:
 # company/overrides-in.yaml for why the tag is a commit sha, why both regions
 # carry this key, and what overwrites it.
 image:
-  tag: "1.0.0"
+  tag: "8ae0ec5"

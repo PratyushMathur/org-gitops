@@ -38,4 +38,4 @@ rollout:
 # See company/overrides-in.yaml for why this is a commit sha, and for why the
 # chart's own image.tag no longer decides what prod runs.
 image:
-  tag: "1.0.2"
+  tag: "8ae0ec5"
