@@ -26,6 +26,17 @@ downward API. The label is deliberately NOT part of the selector: the Services
 must match both tracks, and Argo Rollouts tells them apart by injecting its own
 `rollouts-pod-template-hash`.
 
+KNOWN WRINKLE: TRACK is a snapshot, not a live value. A downward API *env var*
+is resolved once when the container starts; only a downward API *volume* tracks
+later label changes. On promotion Argo Rollouts relabels the canary pods
+`track=stable`, but the processes inside them keep the value they booted with,
+so a promoted pod goes on reporting `track: canary` until it is replaced. The
+label on the pod is correct; the env var is stale.
+
+Read it as "the track this pod was introduced in", which is what it accurately
+records. Making it live means reading the label from a downward API volume at
+request time, which is an application change, not a chart one.
+
   templates/all.yaml
   ---------------------------------
   {{ include "base.all" . }}

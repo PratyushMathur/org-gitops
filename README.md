@@ -7,6 +7,7 @@ Application Helm charts and Argo CD applications for the org.
 ```
 helm/
 ├── base/                     # library chart — shared templates + org defaults
+├── argo-rollouts/            # the progressive-delivery controller + GW API plugin
 ├── gateway/                  # the cluster's shared Gateway (one per cluster)
 ├── company/                  # global service (global Cloud SQL Postgres)
 ├── employee/                 # regional service (regional Cloud SQL Postgres + Redis)
@@ -45,7 +46,7 @@ paths:
 
 | Chart | Tier | Databases | Canary |
 | --- | --- | --- | --- |
-| `company` | global | one global Cloud SQL Postgres, shared by both regions | 20% in, 5% us |
+| `company` | global | one global Cloud SQL Postgres, shared by both regions | 20→50% in, 5→20→50% us |
 | `employee` | regional | that region's Cloud SQL Postgres + in-cluster Redis | 50% both |
 | `regional-data` | — | the per-region Redis itself | — |
 
@@ -61,6 +62,23 @@ curl -s      "http://api-us.pynd.dev/companies"          # same list
 curl -X POST "http://api-ind.pynd.dev/employees?name=asha&company=acme"
 curl -s      "http://api-us.pynd.dev/employees"          # different list
 ```
+
+Releases are progressive. Both services render as Argo Rollouts **Rollouts**, so
+changing `image.tag` starts a canary rather than a straight replacement: the
+controller shifts weight on the app's HTTPRoute a step at a time and waits at
+each pause for a human.
+
+```bash
+kubectl argo rollouts get rollout company -n demo --watch
+kubectl argo rollouts promote company -n demo      # advance one step
+kubectl argo rollouts undo    company -n demo      # roll back
+
+curl -H 'X-Canary: always' http://api-ind.<ip>.sslip.io/companies   # pin to the canary
+```
+
+India leads at 20% then 50%; the US starts at 5% and adds a step. The weights
+live in the chart, not in anyone's head — see `helm/company/values.yaml` and
+`environments/prod/company/overrides-us.yaml`.
 
 One hostname per region, not one per service: each cluster has a single Gateway
 behind a single reserved IP, so the two services are separated by path prefix

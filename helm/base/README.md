@@ -97,11 +97,57 @@ gateway:
 The IP is named rather than written literally, so recreating the Gateway does
 not renumber the DNS record that Terraform published for it.
 
-## Canary releases
+## Progressive delivery (Argo Rollouts)
 
-`base.all` renders the stable track. `base.canary` renders a second, smaller
-copy of the same workload — ConfigMap, Deployment, Service, and on the Ingress
-path a second Ingress — behind a weighted split:
+The preferred path. `rollout.enabled` swaps the Deployment for an argoproj.io
+**Rollout** and hands the canary to the Argo Rollouts controller, which creates
+the canary ReplicaSet whenever the pod template changes, walks `rollout.steps`,
+and rewrites the weights on the app's HTTPRoute through the Gateway API
+traffic-router plugin.
+
+```yaml
+# values.yaml
+image:
+  tag: "1.0.2"        # changing this is what starts a rollout
+rollout:
+  enabled: true
+  steps:
+    - setWeight: 20
+    - pause: {}       # waits for `kubectl argo rollouts promote <name>`
+    - setWeight: 50
+    - pause: {}
+```
+
+`base.all` then renders a Rollout, a `<name>-canary` Service and a second
+HealthCheckPolicy for it. There is no second image tag to pin: the canary is
+whatever the next `image.tag` is, and rolling back is `kubectl argo rollouts
+undo` rather than another commit.
+
+The HTTPRoute ships with both backends at **100/0**. The plugin reweights
+backends that are already on the route — it does not add them — so a route
+carrying only the stable Service would leave the rollout progressing on paper
+while every request kept landing on stable.
+
+Requires `httpRoute.enabled` and the controller from `helm/argo-rollouts`. It is
+mutually exclusive with `canary` below, and the render fails if both are on.
+
+**`track` is a pod label, not a ConfigMap key.** Both tracks share one pod
+template now, so `TRACK` comes from the label through the downward API —
+defaulted to `stable`, overridden to `canary` by `canaryMetadata`. The label is
+kept out of the selector so both Services still match both tracks; Argo Rollouts
+separates them with its own `rollouts-pod-template-hash`.
+
+Note the value is a snapshot. Downward API *env vars* resolve once at container
+start, so after a promotion — when Rollouts relabels the pods `stable` — the
+processes keep reporting `canary` until they are replaced. Read it as "the track
+this pod was introduced in".
+
+## Canary releases (self-managed)
+
+The older path, kept for charts not on Rollouts. `base.all` renders the stable
+track. `base.canary` renders a second, smaller copy of the same workload —
+ConfigMap, Deployment, Service, and on the Ingress path a second Ingress —
+behind a weighted split that only moves when someone edits git:
 
 ```yaml
 # templates/all.yaml
