@@ -1,0 +1,12 @@
+# Registers the External Secrets Operator in prod, in its own namespace — it is a
+# cluster controller, not part of the demo workload.
+app: external-secrets
+env: prod
+chartPath: helm/external-secrets
+namespace: external-secrets
+# platform-prod, not apps-prod: this chart installs CRDs, cluster RBAC and a
+# cluster-scoped ClusterSecretStore, which apps-prod deliberately forbids.
+argoProject: platform-prod
+# Synced by hand: every app's Secrets depend on this controller, so it must never
+# update itself unattended.
+autoSync: false

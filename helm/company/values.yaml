@@ -34,26 +34,48 @@ envFrom:
 
 config: {}
 
-# DEMO PASSWORD in git. Fine for a review environment; in production set
-# `extraObjects: []` and let External Secrets create a Secret of the same name.
+# The database credential, synced from GCP Secret Manager by External Secrets
+# rather than written here. `db-app-password` is created by org-infra's data layer;
+# nothing in this repo holds the value.
+#
+# ESO owns the resulting `company-db` Secret (creationPolicy: Owner), so every key
+# the container needs must be produced here — the app does
+# os.environ["GLOBAL_POSTGRES_URL"] and crashes without it.
+#
+# The backticks escape the inner braces: extraObjects are run through `tpl`, so an
+# unescaped {{ .password }} would be resolved by Helm against the chart context
+# (yielding nothing) instead of reaching ESO's own templating.
+#
+# Host, user and database stay in git deliberately — they are configuration, not
+# secrets, and keeping them visible makes the URL reviewable.
 #
 # `global-postgres.internal` is the shared Cloud SQL instance (org-infra
-# `data.cloud_sql.instances.global`) — one server in us-central1. The name
-# resolves in every VPC through the split-horizon `internal.` zone, each
-# answering with its own Private Service Connect endpoint for the same instance.
-# Different IP per region, same database: that is what makes this tier global.
-#
-# There is no in-cluster stand-in. If pods will not go Ready, check that
-# org-infra's `data.cloud_sql.enabled` is true and applied — /readyz opens a real
-# connection, so an unresolvable name means no backend.
+# `data.cloud_sql.instances.global`) — one server in us-central1. The name resolves
+# in every VPC through the split-horizon `internal.` zone, each answering with its
+# own Private Service Connect endpoint for the same instance. Different IP per
+# region, same database: that is what makes this tier global.
 extraObjects:
-  - apiVersion: v1
-    kind: Secret
+  - apiVersion: external-secrets.io/v1
+    kind: ExternalSecret
     metadata:
       name: company-db
-    type: Opaque
-    stringData:
-      GLOBAL_POSTGRES_URL: "postgresql://app:demo@global-postgres.internal:5432/company"
+    spec:
+      # The password only changes when Terraform rotates it, so an hour is ample.
+      refreshInterval: 1h
+      secretStoreRef:
+        name: gcp-secret-manager
+        kind: ClusterSecretStore
+      target:
+        name: company-db
+        creationPolicy: Owner
+        template:
+          engineVersion: v2
+          data:
+            GLOBAL_POSTGRES_URL: "postgresql://app:{{ `{{ .password }}` }}@global-postgres.internal:5432/company"
+      data:
+        - secretKey: password
+          remoteRef:
+            key: db-app-password
 
 # /healthz does not touch the database, so an outage will not restart every pod.
 # /readyz does, so an affected pod leaves the Service instead.

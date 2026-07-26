@@ -1,0 +1,17 @@
+apiVersion: v2
+name: external-secrets
+description: >-
+  The External Secrets Operator, plus the ClusterSecretStore pointing at this
+  project's Secret Manager. A thin wrapper around the upstream chart so the
+  controller is installed the same way as everything else: from this repo,
+  through Argo CD.
+type: application
+version: 0.1.0
+appVersion: "2.8.0"
+
+# No dependency on helm/base — that library renders an application's workload
+# set, and this chart installs a controller.
+dependencies:
+  - name: external-secrets
+    version: 2.8.0
+    repository: https://charts.external-secrets.io

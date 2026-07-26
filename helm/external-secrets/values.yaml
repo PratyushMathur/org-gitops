@@ -1,0 +1,48 @@
+# external-secrets — syncs secrets from GCP Secret Manager into the cluster.
+#
+# Everything under the `external-secrets` key is passed to the upstream chart.
+# This file holds only what differs from its defaults.
+
+# The GCP project whose Secret Manager the ClusterSecretStore reads.
+projectID: fynd-project-trial
+
+# The Google service account the controller impersonates, created by org-infra's
+# data layer (`external_secrets_service_account` output). No key is involved: the
+# annotation below is what makes GKE Workload Identity mint tokens for it, and the
+# matching iam.workloadIdentityUser binding lives in Terraform.
+gcpServiceAccount: external-secrets@fynd-project-trial.iam.gserviceaccount.com
+
+external-secrets:
+  # The CRDs are the API the app charts render ExternalSecrets against, so this
+  # controller owns them.
+  installCRDs: true
+
+  serviceAccount:
+    # Pinned rather than left to the chart's fullname: Terraform's Workload
+    # Identity binding names this ServiceAccount literally, so it must not drift.
+    name: external-secrets
+    annotations:
+      iam.gke.io/gcp-service-account: external-secrets@fynd-project-trial.iam.gserviceaccount.com
+
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+  webhook:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+
+  certController:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 128Mi

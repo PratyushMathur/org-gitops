@@ -36,6 +36,10 @@ spec:
       kind: MutatingWebhookConfiguration
     - group: ""
       kind: Namespace
+    # The store every ExternalSecret refers to. Cluster-scoped, so the apps in
+    # apps-prod can stay limited to namespaced ExternalSecrets.
+    - group: external-secrets.io
+      kind: ClusterSecretStore
 
   namespaceResourceWhitelist:
     - group: "*"
