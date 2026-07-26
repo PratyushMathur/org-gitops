@@ -43,6 +43,20 @@ spec:
         app.kubernetes.io/part-of: org-gitops
         env: "{{.env}}"
         cluster: "{{.nameNormalized}}"
+      annotations:
+        # Diff by asking the API server what the manifest would actually change
+        # (a server-side apply dry-run), instead of comparing our rendered YAML
+        # against the stored object field by field.
+        #
+        # Without this, anything the API server defaults reads as drift forever:
+        # the HTTPRoutes came back OutOfSync on `group: ""`, `kind: Service` and
+        # `weight: 1` inside backendRefs, and regional-data on StatefulSet
+        # defaults — none of which any chart writes, and none of which a sync
+        # can fix, so `Synced` stops meaning anything. `kubectl diff` reported no
+        # change for all three, which is precisely the comparison this turns on.
+        #
+        # Needs ServerSideApply, set in syncPolicy.syncOptions below.
+        argocd.argoproj.io/compare-options: ServerSideDiff=true
       # No resources-finalizer: deleting a prod Application must not cascade.
     spec:
       # .argoProject, not .project: the clusters generator emits its own empty
