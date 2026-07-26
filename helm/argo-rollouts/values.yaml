@@ -35,11 +35,45 @@ argo-rollouts:
       limits:
         memory: 256Mi
 
-  # The rollout dashboard is a separate deployment and is off by default. Left
-  # off: `kubectl argo rollouts get rollout <name> --watch` covers the same
-  # ground without exposing another service.
+  # The rollout dashboard — the canary control portal. A separate deployment
+  # from the controller, off by default upstream. It is on because promoting or
+  # aborting a canary should not require a laptop with kubectl and cluster
+  # credentials; it is reached over the WireGuard VPN and never from the
+  # internet (see org-infra docs/wireguard-vpn.md).
   dashboard:
-    enabled: false
+    enabled: true
+
+    # readonly would deny every mutating verb, which would leave a rollout
+    # *viewer*, not a control portal — promote/abort/retry are the point. The
+    # dashboard has no authentication of its own, so VPN membership is the
+    # entire access control. Keep the peer list short.
+    readonly: false
+
+    # createClusterRole (default true) is what lets the UI see the Rollouts in
+    # `demo` rather than only those in its own namespace. Not restated here —
+    # noted because it is the difference between a working portal and an empty
+    # one, and clusterInstall above is a separate switch for the controller.
+
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+
+    service:
+      # Stays ClusterIP. The frontend is a regional internal ALB owned by
+      # Terraform (org-infra live/prod/cluster-a/data), which reaches these pods
+      # through a standalone NEG — the same split as the `demo` Service and the
+      # global ALB: the chart publishes the NEG, Terraform owns the load
+      # balancer, its internal IP and the rollouts-*.internal DNS name.
+      #
+      # The port key must be the dashboard's service port (3100) and the NEG
+      # name must match data.canary_portal.neg_name in that repo's config.yaml —
+      # a mismatch leaves the backend service pointing at a NEG that never
+      # appears, and Terraform fails at apply.
+      annotations:
+        cloud.google.com/neg: '{"exposed_ports": {"3100": {"name": "rollouts-dashboard-neg"}}}'
 
 # The ServiceAccount the upstream subchart creates for the controller, which the
 # Gateway API plugin's ClusterRoleBinding attaches to. It follows the subchart's
