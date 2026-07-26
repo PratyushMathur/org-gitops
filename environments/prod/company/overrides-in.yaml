@@ -33,3 +33,29 @@ httpRoute:
     - api-ind.34.93.125.151.sslip.io
 
 # Canary weight stays at the chart's 20% here. India leads the rollout.
+
+# The image this region runs, written by org-apps CI on every push to main (job
+# `promote` in .github/workflows/build-services.yml). Both regions carry this key
+# and CI writes the same tag to both, so the two clusters are never knowingly on
+# different images.
+#
+# What still makes India lead is the weight ladder, not the tag: this region opens
+# at 20% while overrides-us.yaml opens at 5% and takes an extra step. Both regions
+# pause for a human `kubectl argo rollouts promote`, so the release advances one
+# cluster at a time even though the tag lands in both files in one commit.
+#
+# Because both regions pin the tag here, helm/company/values.yaml `image.tag` no
+# longer decides what prod runs. It is the fallback for a cluster with no `region`
+# label (overrides-none.yaml does not exist and is skipped) and for a bare
+# `helm template`. Expect it to read older than what is deployed.
+#
+# A short commit sha, not a version or `latest`: it is what every build pushes,
+# it traces straight back to a commit, and a moving tag would make the rollout
+# unreproducible. base.versionLabel derives VERSION from it, so the app reports
+# the same string it was built from.
+#
+# CI rewrites the `tag:` line below and nothing else. Editing it by hand works
+# and is how you would roll this region back, but the next push to main
+# overwrites it.
+image:
+  tag: "1.0.2"

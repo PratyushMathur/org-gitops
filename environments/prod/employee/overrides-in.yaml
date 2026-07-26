@@ -22,3 +22,9 @@ httpRoute:
   hostnames:
     - api-ind.pynd.dev
     - api-ind.34.93.125.151.sslip.io
+
+# The image this region runs, written by org-apps CI on every push to main. See
+# company/overrides-in.yaml for why the tag is a commit sha, why both regions
+# carry this key, and what overwrites it.
+image:
+  tag: "1.0.0"

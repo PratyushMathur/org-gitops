@@ -29,3 +29,13 @@ rollout:
     - pause: {}
     - setWeight: 50
     - pause: {}
+
+# The image this region runs, written by org-apps CI on every push to main. CI
+# writes the same tag here and in overrides-in.yaml in a single commit, so the two
+# clusters are never knowingly on different images — the caution above is spent on
+# how fast traffic shifts, not on which build each region gets.
+#
+# See company/overrides-in.yaml for why this is a commit sha, and for why the
+# chart's own image.tag no longer decides what prod runs.
+image:
+  tag: "1.0.2"
