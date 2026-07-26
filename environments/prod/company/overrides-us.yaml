@@ -7,10 +7,13 @@ config:
   REGION: us-central1
   CLUSTER: cluster-b
 
-# See overrides-in.yaml.
+# See overrides-in.yaml, including why there is a second, uglier name and what
+# hard-coding the address in it gives up. `api-us` is this region's reserved
+# address.
 httpRoute:
   hostnames:
     - api-us.pynd.dev
+    - api-us.34.72.1.107.sslip.io
 
 # Same release, held further back here: India is at 20%, the US at 5%. Rolling a
 # canary out one region at a time is exactly why this file exists.

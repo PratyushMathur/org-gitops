@@ -11,3 +11,4 @@ config:
 httpRoute:
   hostnames:
     - api-us.pynd.dev
+    - api-us.34.72.1.107.sslip.io

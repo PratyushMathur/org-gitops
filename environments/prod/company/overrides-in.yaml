@@ -14,8 +14,22 @@ config:
 # static IP this cluster's Gateway claims. There is no shared name across both
 # clusters any more: the previous company.demo.fynd.dev needed a global load
 # balancer in front of two regional ones, and nothing serves it today.
+#
+# Two names, both served. pynd.dev is not a registered domain, so the first one
+# answers NXDOMAIN everywhere and will keep doing so until someone buys it; it
+# stays here so nothing has to be rewritten on the day that happens. The second
+# works today: sslip.io is a public wildcard resolver that hands back whatever
+# IP is spelled out in the name, with no zone, registration or delegation
+# involved.
+#
+# Note what that costs. The address is no longer hidden behind the name — this
+# line hard-codes the reserved google_compute_address `api-ind`, so if Terraform
+# ever recreates it, this file has to be edited in step. That is exactly the
+# indirection environments/prod/gateway/overrides-in.yaml is describing when it
+# says the name, not the address, is what travels between the repos.
 httpRoute:
   hostnames:
     - api-ind.pynd.dev
+    - api-ind.34.93.125.151.sslip.io
 
 # Canary weight stays at the chart's 20% here. India leads the rollout.

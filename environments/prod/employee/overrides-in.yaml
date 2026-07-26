@@ -11,8 +11,14 @@ config:
   REGION: asia-south1
   CLUSTER: cluster-a
 
-# Same hostname as company in this region — the two are separated by path
-# (/employees vs /companies) on the one Gateway, not by name.
+# Same hostnames as company in this region — the two are separated by path
+# (/employees vs /companies) on the one Gateway, not by name. Both names have to
+# be listed here as well for that to hold: an HTTPRoute only answers for the
+# hostnames it names itself, so a name company serves and employee omits would
+# resolve, reach the Gateway, and 404 on /employees alone.
+#
+# See company/overrides-in.yaml for why the sslip.io name exists.
 httpRoute:
   hostnames:
     - api-ind.pynd.dev
+    - api-ind.34.93.125.151.sslip.io
