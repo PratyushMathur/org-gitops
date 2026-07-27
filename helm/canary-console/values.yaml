@@ -8,6 +8,13 @@
 component: console
 partOf: platform
 
+# The one workload here that genuinely talks to the API server, so it needs the
+# token the base chart withholds by default. Without this the pod crash-loops on
+# "Service token file does not exist" — the SA exists and RBAC is correct, but
+# nothing is mounted for the client to read.
+serviceAccount:
+  automount: true
+
 image:
   repository: us-docker.pkg.dev/fynd-project-trial/apps/canary-console
   tag: "87d4091"
