@@ -1,0 +1,14 @@
+apiVersion: v2
+name: canary-console
+description: >-
+  Operator portal for the Argo Rollouts canaries. One instance per cluster,
+  published to that region's internal load balancer and reachable only over the
+  WireGuard VPN.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+dependencies:
+  - name: base
+    version: 0.5.0
+    repository: "file://../base"

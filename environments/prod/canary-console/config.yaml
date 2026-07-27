@@ -1,0 +1,10 @@
+# Registers the canary console in prod. Deployed to every cluster labelled
+# env=prod, alongside the workloads it controls.
+app: canary-console
+env: prod
+chartPath: helm/canary-console
+namespace: demo
+argoProject: apps-prod
+# Sync automatically: it is a stateless read-mostly console and holds no data, so
+# there is nothing an unattended sync can damage.
+autoSync: true
