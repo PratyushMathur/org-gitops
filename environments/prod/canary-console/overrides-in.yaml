@@ -1,0 +1,11 @@
+# India (asia-south1) — prod clusters labelled region=in.
+
+# Shown in the header, and stamped on every audit line the console logs.
+config:
+  REGION: asia-south1
+  CLUSTER: cluster-a
+  # The other region's console. Both are VPN-only names in the hub zone, so the
+  # link works from a laptop on the tunnel but not from inside this cluster —
+  # the spokes are peered to the hub, not to each other.
+  PEER_REGION: us-central1
+  PEER_URL: http://console-us.internal

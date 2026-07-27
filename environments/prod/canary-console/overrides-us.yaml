@@ -1,0 +1,7 @@
+# US (us-central1) — prod clusters labelled region=us.
+
+config:
+  REGION: us-central1
+  CLUSTER: cluster-b
+  PEER_REGION: asia-south1
+  PEER_URL: http://console-in.internal

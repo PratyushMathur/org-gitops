@@ -1,0 +1,101 @@
+# canary-console — the operator portal for this cluster's rollouts.
+#
+# Deliberately not on the Gateway: this is an internal tool. The Service stays
+# ClusterIP and publishes a standalone NEG that a Terraform-owned internal ALB
+# points at, the same split as the Rollouts dashboard. Reachable only from the
+# WireGuard VPN.
+
+component: console
+partOf: platform
+
+image:
+  repository: us-docker.pkg.dev/fynd-project-trial/apps/canary-console
+  tag: "87d4091"
+
+# One replica: it holds no state and an operator page does not need HA. Two
+# would also fight for the same NEG endpoints for no benefit.
+replicaCount: 1
+
+podSecurityContext:
+  runAsUser: 65532
+  runAsGroup: 65532
+
+# Python writes __pycache__ on import, so the base chart's read-only root is off
+# here for the same reason as the Flask services.
+securityContext:
+  readOnlyRootFilesystem: false
+
+# REGION, CLUSTER, PEER_URL and PEER_REGION come from the per-region overrides.
+# NAMESPACE is the namespace whose rollouts this console manages.
+config:
+  NAMESPACE: demo
+
+resources:
+  requests: { cpu: 25m, memory: 64Mi }
+  limits: { memory: 128Mi }
+
+livenessProbe:
+  httpGet: { path: /healthz, port: http }
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet: { path: /healthz, port: http }
+  periodSeconds: 10
+
+service:
+  # The NEG the internal ALB uses as its backend. Keyed by the Service port (80),
+  # and the name must match data.canary_console.neg_name in org-infra — a
+  # mismatch leaves Terraform pointing at a NEG that never appears.
+  annotations:
+    cloud.google.com/neg: '{"exposed_ports": {"80": {"name": "canary-console-neg"}}}'
+
+# No HTTPRoute. Putting this on the shared Gateway would publish an unauthenticated
+# control surface on the region's public address.
+httpRoute:
+  enabled: false
+
+# A Deployment, not a Rollout: this is the thing that drives rollouts, so it must
+# not depend on itself to ship.
+rollout:
+  enabled: false
+
+# Least privilege, and namespaced. The console reads rollouts, the ReplicaSets it
+# resolves image tags from, and the HTTPRoute it cross-checks the real traffic
+# split against. It writes rollouts and rollouts/status — status carries
+# promote/abort/skip, spec carries the manual pause.
+#
+# `rollouts/status` is a separate resource for RBAC because the CRD declares a
+# status subresource; without it every promote fails 403 while reads look fine.
+extraObjects:
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: canary-console
+    rules:
+      - apiGroups: ["argoproj.io"]
+        resources: ["rollouts"]
+        verbs: ["get", "list", "watch", "patch", "update"]
+      - apiGroups: ["argoproj.io"]
+        resources: ["rollouts/status"]
+        verbs: ["get", "patch", "update"]
+      - apiGroups: [""]
+        resources: ["pods"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["apps"]
+        resources: ["replicasets"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["gateway.networking.k8s.io"]
+        resources: ["httproutes"]
+        verbs: ["get", "list", "watch"]
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: canary-console
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: canary-console
+    subjects:
+      - kind: ServiceAccount
+        # base.serviceAccountName resolves to the release name here.
+        name: canary-console
