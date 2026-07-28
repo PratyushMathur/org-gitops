@@ -106,6 +106,10 @@ httpRoute:
 # canary console will accept, and an operator switching between the two services
 # mid-incident should not find that a weight which worked for one is rejected by
 # the other. Uniform beats individually optimal here.
+# No trailing pause after the last rung — see helm/company/values.yaml. A trailing
+# pause is fine below 100%, but after a 100 rung it parks the rollout at full
+# canary weight reporting Paused with nothing left to decide, and leaves the old
+# stable pods running because the rollout never completes.
 rollout:
   enabled: true
   steps:
@@ -118,4 +122,3 @@ rollout:
     - setWeight: 75
     - pause: {}
     - setWeight: 100
-    - pause: {}
