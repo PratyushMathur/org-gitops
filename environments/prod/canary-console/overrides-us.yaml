@@ -9,4 +9,4 @@ config:
 # See overrides-in.yaml. Written by org-apps CI, same tag as that file in the same
 # commit, so the two consoles are never knowingly on different builds.
 image:
-  tag: "87d4091"
+  tag: "aa54887"
