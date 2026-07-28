@@ -102,10 +102,18 @@ service:
 # helm/gateway, so enabling it creates no load balancer of its own.
 httpRoute:
   enabled: false
-  # `sectionName` picks the listener by name.
+  # No `sectionName`, deliberately. It pins a route to one named listener, and
+  # pinning it to `http` is why routes served on :80 and nothing on :443 when the
+  # HTTPS listener was added — the Gateway reported the listener Programmed and
+  # Ready with attachedRoutes 0, which looks like working TLS right up until a
+  # request returns 404.
+  #
+  # Omitting it attaches the route to every listener on the Gateway whose
+  # protocol and hostnames are compatible, so one route serves both ports and
+  # gains any listener added later. Set `sectionName` per app only to keep a route
+  # off a listener on purpose.
   parentRefs:
     - name: api
-      sectionName: http
   # Usually set per region — the hostname is what differs between clusters.
   hostnames: []
   annotations: {}
