@@ -12,16 +12,15 @@ httpRoute:
     - api-us.pynd.dev
     - api-us.34.72.1.107.sslip.io
 
-# Slower than India's 20/50, so a regression has two chances to be caught before
-# the larger region carries half the traffic.
-rollout:
-  steps:
-    - setWeight: 5
-    - pause: {}
-    - setWeight: 20
-    - pause: {}
-    - setWeight: 50
-    - pause: {}
+# No rollout.steps override. This region used to run a longer 5/20/50 ladder than
+# India's 20/50 so a regression had more chances to be caught, but the ladder is
+# also the list of weights the canary console can select, and an asymmetric one
+# meant an operator saw different buttons depending on which region's console they
+# had open. Both regions now share the ladder in helm/company/values.yaml.
+#
+# The US is still held back — but by the operator promoting India first and leaving
+# this region parked, which is a per-release decision, rather than by a difference
+# in git that applies to every release whether or not it is wanted.
 
 # Written by org-apps CI on every push to main (short commit sha), same tag as
 # overrides-in.yaml in the same commit.

@@ -100,10 +100,22 @@ httpRoute:
       pathType: PathPrefix
       servicePort: http
 
-# Coarser steps than company: employee is the regional service, so a bad release
-# is already contained to one region.
+# The same ladder as company, and the same in both regions. employee is the
+# regional service, so a bad release is already contained to one region and a
+# coarser ladder would be defensible — but the rungs are the set of weights the
+# canary console will accept, and an operator switching between the two services
+# mid-incident should not find that a weight which worked for one is rejected by
+# the other. Uniform beats individually optimal here.
 rollout:
   enabled: true
   steps:
+    - setWeight: 10
+    - pause: {}
+    - setWeight: 25
+    - pause: {}
     - setWeight: 50
+    - pause: {}
+    - setWeight: 75
+    - pause: {}
+    - setWeight: 100
     - pause: {}

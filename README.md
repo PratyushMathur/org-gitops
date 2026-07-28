@@ -46,8 +46,8 @@ paths:
 
 | Chart | Tier | Databases | Canary |
 | --- | --- | --- | --- |
-| `company` | global | one global Cloud SQL Postgres, shared by both regions | 20→50% in, 5→20→50% us |
-| `employee` | regional | that region's Cloud SQL Postgres + in-cluster Redis | 50% both |
+| `company` | global | one global Cloud SQL Postgres, shared by both regions | 5→10→25→50→75→100%, both regions |
+| `employee` | regional | that region's Cloud SQL Postgres + in-cluster Redis | 5→10→25→50→75→100%, both regions |
 | `regional-data` | — | the per-region Redis itself | — |
 
 Companies are global, so both regions read the same list. Employees are
@@ -76,9 +76,21 @@ kubectl argo rollouts undo    company -n demo      # roll back
 curl -H 'X-Canary: always' http://api-ind.<ip>.sslip.io/companies   # pin to the canary
 ```
 
-India leads at 20% then 50%; the US starts at 5% and adds a step. The weights
-live in the chart, not in anyone's head — see `helm/company/values.yaml` and
-`environments/prod/company/overrides-us.yaml`.
+Both services climb the same ladder in both regions — 10, 25, 50, 75, 100 —
+pausing at every rung. The weights live in the chart, not in anyone's head: see
+`helm/company/values.yaml` and `helm/employee/values.yaml`. There is no
+per-region `rollout.steps` override any more.
+
+The ladder is also the set of weights the canary console can reach. Weight is not
+a spec field — it exists only as `steps[].setWeight` — so the console can only
+jump to a rung that is already declared. Anything off-ladder is refused with the
+nearest rungs rather than rounded, and getting a weight that is not listed here
+takes a commit.
+
+Nothing about the ladder staggers the two regions, and that is deliberate. What
+staggers a release is the operator advancing one region and holding or aborting
+the other — a decision taken per release, rather than a difference in git that
+applies whether or not it is wanted that day.
 
 One hostname per region, not one per service: each cluster has a single Gateway
 behind a single reserved IP, so the two services are separated by path prefix

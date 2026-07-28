@@ -113,13 +113,35 @@ httpRoute:
       servicePort: http
 
 # The canary is whatever image.tag becomes next; changing it and syncing starts a
-# rollout. India leads at 20% then 50%, pausing at each until a human runs
+# rollout. It pauses at every rung until a human advances it, with
 #   kubectl argo rollouts promote company -n demo
-# The US is held further back — see overrides-us.yaml.
+# or the Promote button in the canary console.
+#
+# Both regions share this ladder. There is deliberately no per-region override:
+# the ladder is the set of weights an operator can select, and an asymmetric one
+# meant the same button was present in one console and missing in the other.
+# What staggers a release now is the operator advancing one region and holding or
+# aborting the other, which is a decision taken per release rather than a
+# constant baked into git.
+#
+# Every rung is also a weight the canary console can select. Weight is not a spec
+# field — it exists only as steps[].setWeight — so the console can only reach a
+# value that appears here, and anything else needs a commit.
+#
+# Five rungs, deliberately. A denser ladder would let the console accept more
+# typed values, but it buys precision nobody uses: the decision an operator
+# actually makes is roughly "a tenth, a quarter, half, most, all", and twenty
+# rungs made the Rollout spec long to read for no gain in control.
 rollout:
   enabled: true
   steps:
-    - setWeight: 20
+    - setWeight: 10
+    - pause: {}
+    - setWeight: 25
     - pause: {}
     - setWeight: 50
+    - pause: {}
+    - setWeight: 75
+    - pause: {}
+    - setWeight: 100
     - pause: {}
