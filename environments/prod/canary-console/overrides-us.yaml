@@ -5,3 +5,8 @@ config:
   CLUSTER: cluster-b
   PEER_REGION: asia-south1
   PEER_URL: http://console-in.internal
+
+# See overrides-in.yaml. Written by org-apps CI, same tag as that file in the same
+# commit, so the two consoles are never knowingly on different builds.
+image:
+  tag: "87d4091"
