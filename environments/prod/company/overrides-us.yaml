@@ -25,4 +25,4 @@ httpRoute:
 # Written by org-apps CI on every push to main (short commit sha), same tag as
 # overrides-in.yaml in the same commit.
 image:
-  tag: "b72e14d"
+  tag: "6.0.0"
