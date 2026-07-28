@@ -84,6 +84,23 @@ resources:
   requests: { cpu: 50m, memory: 128Mi }
   limits: { memory: 256Mi }
 
+# Standalone NEG for the global anycast ALB — see helm/company/values.yaml.
+#
+# ⚠️ Read the caveat before relying on this for disaster recovery. employee is the
+# REGIONAL service: each region has its own Cloud SQL instance holding different
+# rows. Cross-region failover therefore does not degrade this service, it changes
+# which dataset answers — a us-central1 client failed over to asia-south1 gets
+# India's employees, returned with a 200. Unavailable is honest; wrong is not.
+#
+# It is published anyway so the global LB can path-route /employees rather than
+# 404 it, and so the choice is one line of Terraform rather than a chart change.
+# If that trade stops being acceptable, drop this NEG from
+# platform.global_alb.apps in org-infra and /employees stops being globally
+# routable, which is the safe default.
+service:
+  annotations:
+    cloud.google.com/neg: '{"exposed_ports": {"80": {"name": "employee-neg"}}}'
+
 # Four, matching company — see helm/company/values.yaml for why, and for the
 # capacity headroom this eats during a canary.
 replicaCount: 4

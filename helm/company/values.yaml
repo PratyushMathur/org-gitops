@@ -96,6 +96,25 @@ resources:
   requests: { cpu: 50m, memory: 128Mi }
   limits: { memory: 256Mi }
 
+# Publish a standalone NEG so the global anycast ALB can reach these pods
+# directly. GKE's NEG controller creates one per zone holding pod IPs; Terraform
+# — not GKE — owns the backend service that attaches them, which is why the name
+# is fixed here and must match platform.global_alb.apps.company.neg_name in
+# org-infra. A mismatch is a Terraform apply error, not a silent 502.
+#
+# This is the cross-region failover path: the same NEG name exists in both
+# clusters, both hang off one global backend service, and the LB's health check
+# drains a region that stops answering. The regional Gateway is unaffected — it
+# builds its own load balancer and ignores this annotation.
+#
+# Note this tracks the *stable* Service, whose selector Argo Rollouts pins to the
+# stable ReplicaSet hash. So the global LB serves stable only and a canary is not
+# exposed through it. That is deliberate: a disaster path should not be the first
+# place a new build takes traffic.
+service:
+  annotations:
+    cloud.google.com/neg: '{"exposed_ports": {"80": {"name": "company-neg"}}}'
+
 # Four, so a canary weight has somewhere to land: the controller scales the canary
 # ReplicaSet to ceil(replicas x weight), which at two replicas rounds 10% and 25%
 # to the same single pod. Four makes the low rungs distinguishable.
