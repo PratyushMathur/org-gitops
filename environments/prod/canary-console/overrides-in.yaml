@@ -9,3 +9,14 @@ config:
   # the spokes are peered to the hub, not to each other.
   PEER_REGION: us-central1
   PEER_URL: http://console-us.internal
+
+# Written by org-apps CI on every push to main that touches the console, same as
+# company and employee. It has to exist as a top-level `image:` block even before
+# the first automated write, because the promote job's set-image-tag.py fails
+# loudly on a file without one rather than silently skipping it.
+#
+# The console renders a plain Deployment, not a Rollout, so a tag change here is
+# an ordinary rolling update — there is no canary of the thing that drives
+# canaries.
+image:
+  tag: "87d4091"
