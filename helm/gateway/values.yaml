@@ -17,11 +17,26 @@ gateway:
   className: gke-l7-regional-external-managed
   # addressName comes from the per-region overrides — api-ind / api-us.
 
-  # HTTP only: Certificate Manager cannot validate a domain with no NS delegation,
-  # so org-infra keeps gateway_certs_enabled false and there is no certificate map
-  # to attach. Once pynd.dev is delegated, add `certificateMap` plus an HTTPS
-  # listener with `tls: { mode: Terminate }` and no certificateRefs — the cert is
-  # Google-managed and comes from the certmap annotation, not a Secret.
+  # TLS terminates here on a SELF-SIGNED certificate. Clients get a real
+  # encrypted connection and a trust warning: `curl -k`, or an interstitial in a
+  # browser. That is the honest ceiling here, not a shortcut taken for speed.
+  #
+  # Why no managed certificate. Certificate Manager will not issue for these
+  # Gateways: they are regional, and a REGIONAL managed certificate requires DNS
+  # authorization — the API refuses load balancer authorization outright with
+  # "DNS authorizations must be provided". DNS authorization means writing
+  # _acme-challenge TXT records into the certified domain's own zone, and there is
+  # no such zone available: pynd.dev is not registered, and sslip.io is not ours.
+  # Owning the IP is enough to own a *name* through sslip.io, but not enough to
+  # prove control of it to a CA.
+  #
+  # The path to a real certificate is therefore a registered, delegated domain —
+  # at which point DNS authorization works, org-infra's gateway_certs_enabled can
+  # flip true, and this listener swaps certificateRefs for the certmap annotation.
+  #
+  # HTTP stays open alongside HTTPS rather than redirecting: the demo endpoints are
+  # published as http:// URLs, and a redirect to a certificate the client does not
+  # trust turns a working request into a failed one.
   listeners:
     - name: http
       protocol: HTTP
@@ -29,3 +44,62 @@ gateway:
       allowedRoutes:
         namespaces:
           from: Same
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        # The Secret is materialised by the ExternalSecret in extraObjects below,
+        # not committed here — a private key does not belong in git even when it
+        # protects nothing.
+        certificateRefs:
+          - name: gateway-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+
+# The TLS Secret the HTTPS listener references. External Secrets pulls the
+# certificate and key from Secret Manager and writes a kubernetes.io/tls Secret,
+# so the private key exists in the cluster and in Secret Manager and nowhere else
+# — in particular not in this repository.
+#
+# `gateway-tls-crt` and `gateway-tls-key` are created out of band rather than by
+# Terraform. Generating them in the platform layer would need the External Secrets
+# service account to grant access to, and that account is created in the data
+# layer, which applies *after* platform — so wiring it there would invert the
+# layer order for one demo certificate. See docs/gateway-tls.md for the two
+# commands that create them.
+#
+# refreshInterval is long because a self-signed certificate changes only when
+# somebody regenerates it. Rotating means adding a new Secret Manager version;
+# the controller picks it up on the next refresh, and the Gateway reloads without
+# a restart.
+extraObjects:
+  - apiVersion: external-secrets.io/v1
+    kind: ExternalSecret
+    metadata:
+      name: gateway-tls
+    spec:
+      refreshInterval: 1h
+      secretStoreRef:
+        name: gcp-secret-manager
+        kind: ClusterSecretStore
+      target:
+        name: gateway-tls
+        creationPolicy: Owner
+        template:
+          # kubernetes.io/tls is required by the Gateway API: a listener's
+          # certificateRef will not accept an Opaque Secret, and the failure shows
+          # up as a listener condition rather than a sync error.
+          type: kubernetes.io/tls
+          engineVersion: v2
+          data:
+            tls.crt: "{{ `{{ .crt }}` }}"
+            tls.key: "{{ `{{ .key }}` }}"
+      data:
+        - secretKey: crt
+          remoteRef:
+            key: gateway-tls-crt
+        - secretKey: key
+          remoteRef:
+            key: gateway-tls-key

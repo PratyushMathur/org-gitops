@@ -1,5 +1,15 @@
 {{/*
 `base.gateway`, not `base.all`: this release is a Gateway and nothing else — no
 Deployment, no Service, no ServiceAccount. See helm/base/templates/_gateway.tpl.
+
+`extraObjects` is walked here rather than inherited, because only `base.all` does
+so and this chart deliberately does not use it. Without this the key would be
+accepted in values.yaml and render nothing at all — which is exactly how the TLS
+ExternalSecret went missing the first time it was added.
 */}}
 {{ include "base.gateway" . }}
+{{- $v := fromYaml (include "base.values" .) }}
+{{- range $v.extraObjects }}
+---
+{{ tpl (toYaml .) $ }}
+{{- end }}
