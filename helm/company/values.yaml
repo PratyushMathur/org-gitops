@@ -92,8 +92,17 @@ readinessProbe:
   periodSeconds: 10
   timeoutSeconds: 5
 
+# 25m, not 50m. Measured usage is 8-14m per pod under demo load, so 50m was
+# 4-6x over-provisioned -- and requests, not usage, are what the scheduler packs
+# against. At four replicas across two services that overcommitment filled the
+# e2-medium nodes to 95-99% of allocatable CPU requests, and when a spot node was
+# preempted its pods could not be rescheduled anywhere: "3 Insufficient cpu".
+#
+# 25m still leaves roughly double the observed peak, and doubles how many pods
+# fit per node -- which matters most during a canary, when both ReplicaSets run
+# at once.
 resources:
-  requests: { cpu: 50m, memory: 128Mi }
+  requests: { cpu: 25m, memory: 128Mi }
   limits: { memory: 256Mi }
 
 # No standalone NEG. One was published here so a global anycast ALB could reach
