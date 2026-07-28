@@ -19,4 +19,4 @@ config:
 # an ordinary rolling update — there is no canary of the thing that drives
 # canaries.
 image:
-  tag: "87d4091"
+  tag: "aa54887"
