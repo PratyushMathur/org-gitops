@@ -119,7 +119,21 @@ metadata:
   name: {{ include "base.fullname" . }}-canary
   labels:
     {{- include "base.labels" . | nindent 4 }}
-  {{- $annotations := merge (deepCopy ($v.service.annotations | default dict)) ($v.commonAnnotations | default dict) }}
+  {{/*
+    Every annotation is carried over from the stable Service except the NEG one,
+    which is dropped rather than copied. A standalone NEG is named, and two
+    Services in one zone asking for the same name is a fight the NEG controller
+    resolves by flipping the endpoint set between the stable and canary pods —
+    so a backend service attached to it would swing between tracks with nothing
+    in the Rollout to explain why.
+
+    Giving the canary its own NEG name would be the other fix, but there is
+    nothing to attach it to: the global ALB deliberately serves stable only, so a
+    disaster path is never the first place a new build takes traffic. Canary
+    traffic is shifted on the HTTPRoute by the Rollouts plugin, which does not go
+    through a NEG of its own.
+  */}}
+  {{- $annotations := omit (merge (deepCopy ($v.service.annotations | default dict)) ($v.commonAnnotations | default dict)) "cloud.google.com/neg" }}
   {{- with $annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
