@@ -20,4 +20,4 @@ httpRoute:
 # Written by org-apps CI on every push to main (short commit sha). Overrides the
 # chart's image.tag, which will therefore read older than what is deployed.
 image:
-  tag: "87d4091"
+  tag: "9cb58c1"
