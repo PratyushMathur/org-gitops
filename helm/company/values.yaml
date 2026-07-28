@@ -132,6 +132,22 @@ httpRoute:
 # typed values, but it buys precision nobody uses: the decision an operator
 # actually makes is roughly "a tenth, a quarter, half, most, all", and twenty
 # rungs made the Rollout spec long to read for no gain in control.
+# NOTE no `pause` after the last rung. A trailing pause is fine — and is the
+# base chart's default — when the last rung is below 100: parking at 50% while a
+# human decides whether to finish is a real gate. After a **100** rung it is a
+# trap, because there is no traffic decision left to make.
+#
+# What it looked like: the rollout parks at 100% canary reporting Paused, Argo
+# reports the app Suspended, and because the rollout has not *completed* the
+# controller correctly holds the old stable ReplicaSet at full size — that is what
+# makes an abort instant. So the old pods are never recycled and it reads exactly
+# like a stuck release, needing two further promotes to clear.
+#
+# Ending on setWeight means the rollout runs out of steps and completes on its
+# own: the canary ReplicaSet becomes stable, the old one scales to zero, the phase
+# goes Healthy. 100% is therefore a transition rather than a resting place —
+# selecting it in the console finishes the release, and the last human decision is
+# the pause at 75%.
 rollout:
   enabled: true
   steps:
@@ -144,4 +160,3 @@ rollout:
     - setWeight: 75
     - pause: {}
     - setWeight: 100
-    - pause: {}

@@ -112,6 +112,18 @@ rollout:
     - pause: {}
 ```
 
+The trailing `pause` above is deliberate and safe **because the last rung is
+below 100**: it parks at 50% until a human decides to finish, and promoting from
+there runs the rollout out of steps and completes it.
+
+> **Do not put a `pause` after a `setWeight: 100`.** There is no traffic decision
+> left at 100%, so the rollout parks reporting `Paused` (and Argo reports the app
+> `Suspended`) with nothing waiting on it. Because it has not *completed*, the
+> controller correctly holds the old stable ReplicaSet at full size — that is what
+> makes an abort instant — so the old pods are never recycled and it reads as a
+> stuck release. End the ladder on the `setWeight` instead and it completes on its
+> own. `helm/company/values.yaml` does exactly that.
+
 `base.all` then renders a Rollout, a `<name>-canary` Service and a second
 HealthCheckPolicy for it. There is no second image tag to pin: the canary is
 whatever the next `image.tag` is, and rolling back is `kubectl argo rollouts
