@@ -96,7 +96,16 @@ resources:
   requests: { cpu: 50m, memory: 128Mi }
   limits: { memory: 256Mi }
 
-replicaCount: 2
+# Four, so a canary weight has somewhere to land: the controller scales the canary
+# ReplicaSet to ceil(replicas x weight), which at two replicas rounds 10% and 25%
+# to the same single pod. Four makes the low rungs distinguishable.
+#
+# Capacity note: a canary runs the new ReplicaSet *alongside* the old one, so the
+# peak is 8 pods for this service rather than 4, and the same again for employee.
+# At 50m CPU requested each that is 800m per cluster at peak against e2-medium
+# nodes already at 75-99% of allocatable CPU requests. Both node pools autoscale,
+# so it resolves — but pods can sit Pending for a minute or two first.
+replicaCount: 4
 
 # Fronted by the cluster's shared Gateway (helm/gateway), not an Ingress
 # controller. Both regions expose one hostname, so apps are told apart by path:

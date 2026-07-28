@@ -84,7 +84,9 @@ resources:
   requests: { cpu: 50m, memory: 128Mi }
   limits: { memory: 256Mi }
 
-replicaCount: 2
+# Four, matching company — see helm/company/values.yaml for why, and for the
+# capacity headroom this eats during a canary.
+replicaCount: 4
 
 # See helm/company/values.yaml — same arrangement, different path prefix. Both
 # apps share one Gateway and one hostname per region, so /employees is what
