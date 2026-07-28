@@ -128,9 +128,13 @@ replicaCount: 4
 # this one owns /companies. /healthz, /readyz and /version stay in-cluster.
 httpRoute:
   enabled: true
+  # No sectionName: the route attaches to every compatible listener on the
+  # Gateway, so it serves both :80 and the :443 listener that terminates TLS.
+  # Pinning it to `http` served plain HTTP only, with the HTTPS listener
+  # reporting Programmed and Ready but attachedRoutes 0 — TLS that handshakes
+  # and then 404s. See helm/base/templates/_defaults.tpl.
   parentRefs:
     - name: api
-      sectionName: http
   # hostnames come from environments/prod/company/overrides-<region>.yaml
   paths:
     - path: /companies
